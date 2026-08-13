@@ -1,0 +1,18 @@
+{
+  "name": "v12x-skills",
+  "owner": {
+    "name": "V12X"
+  },
+  "metadata": {
+    "description": "Skills de segurança e produtividade da V12X para o Claude Code.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "v12x-scan",
+      "source": "./skills/v12x-scan",
+      "description": "Auditoria de segurança em profundidade: ferramentas determinísticas antes da leitura, verificação adversarial de cada achado e relatório com veredito de publicação. Cobre aplicação web (IDOR, SSRF, XSS), iOS nativo, multi-tenancy, cadeia/CI e pré-publicação.",
+      "version": "1.1.0"
+    }
+  ]
+}

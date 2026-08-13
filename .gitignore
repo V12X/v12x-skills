@@ -1,0 +1,22 @@
+# segredos — nunca commitar
+.env
+.env.*
+!.env.example
+*.p8
+*.p12
+*.pem
+*.key
+*.keystore
+*.mobileprovision
+
+# ruído do sistema
+.DS_Store
+Thumbs.db
+
+# relatórios locais de auditoria (podem conter caminhos/achados sensíveis)
+.security-reports/
+*.gitleaks.json
+
+# temporários
+/tmp/
+*.log
