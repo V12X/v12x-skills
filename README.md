@@ -51,6 +51,11 @@ Estas skills seguem três regras:
 3. **Verificação antes de reportar.** Todo achado passa por checagem adversarial. Falso
    positivo destrói a confiança no relatório inteiro.
 
+## Changelog
+
+Mudanças por versão em [CHANGELOG.md](CHANGELOG.md). A versão atual é a
+[v1.2.0](https://github.com/V12X/v12x-skills/releases/tag/v1.2.0).
+
 ## Licença
 
 MIT — veja [LICENSE](LICENSE).
