@@ -64,4 +64,5 @@ MIT — veja [LICENSE](LICENSE).
 
 Antes de subir qualquer skill nova, rode a `v12x-scan` nela: `.gitignore` cobrindo segredos,
 varredura de histórico limpa, nenhum caminho de máquina ou nome interno vazado. A ferramenta
-audita as próprias ferramentas.
+audita as próprias ferramentas. Detalhes de estilo, versionamento e release em
+[CONTRIBUTING.md](CONTRIBUTING.md).
