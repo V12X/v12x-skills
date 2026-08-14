@@ -1,5 +1,7 @@
 # v12x-skills
 
+**Português** · [English](README.en.md)
+
 [![Release](https://img.shields.io/github/v/release/V12X/v12x-skills?label=release&color=2ea043)](https://github.com/V12X/v12x-skills/releases/latest)
 [![Licença](https://img.shields.io/github/license/V12X/v12x-skills?color=blue)](LICENSE)
 
@@ -42,14 +44,18 @@ Depois de instalada, a skill dispara sozinha quando você pede uma auditoria, ou
 
 ## Princípios
 
-Estas skills seguem três regras:
+Estas skills seguem o [**Método v12x**](METHOD.md) — auditoria de segurança em quatro teses:
 
 1. **Ferramenta antes de opinião.** O que um scanner determinístico acha, ele acha melhor,
    mais barato e sem alucinar. A leitura crítica entra onde a ferramenta não alcança.
 2. **Nenhum furo silencioso.** O relatório declara o que foi coberto e o que não foi. A
    diferença entre "não achei nada" e "não olhei" precisa estar escrita.
-3. **Verificação antes de reportar.** Todo achado passa por checagem adversarial. Falso
+3. **Refute antes de reportar.** Todo achado sobrevive a uma tentativa de refutação. Falso
    positivo destrói a confiança no relatório inteiro.
+4. **Veredito, não pontuação.** Nada de nota de 0 a 100: contagem por severidade e uma decisão
+   binária de publicar.
+
+O manifesto completo, com o porquê e um contraexemplo de cada tese, está em [METHOD.md](METHOD.md).
 
 ## Changelog
 

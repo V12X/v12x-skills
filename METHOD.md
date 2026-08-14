@@ -2,6 +2,8 @@
 
 *Auditoria de segurança em que dá para confiar o suficiente para agir.*
 
+**Português** · [English](METHOD.en.md)
+
 Na era do código gerado por IA, quase todo mundo audita e quase ninguém confia no resultado.
 Auditoria de segurança falha de dois jeitos, e os dois são fatais de formas opostas: ou ela
 **gera ruído** — falso positivo que treina o leitor a ignorar o relatório inteiro — ou ela
