@@ -1,5 +1,8 @@
 # v12x-skills
 
+[![Release](https://img.shields.io/github/v/release/V12X/v12x-skills?label=release&color=2ea043)](https://github.com/V12X/v12x-skills/releases/latest)
+[![Licença](https://img.shields.io/github/license/V12X/v12x-skills?color=blue)](LICENSE)
+
 Skills da [V12X](https://github.com/V12X) para o [Claude Code](https://claude.com/claude-code).
 Um repositório, várias skills, instaláveis de uma vez como marketplace de plugin.
 
