@@ -1,9 +1,9 @@
 ---
 name: v12x-scan
-description: Auditoria de segurança em profundidade, com ferramentas determinísticas antes da análise por leitura, verificação adversarial de cada achado e relatório acionável. Use quando o usuário pedir "auditar segurança", "revisar segurança", "varredura de segurança", "tem vazamento?", "posso publicar isso?", "está seguro para open source?", "antes de publicar", "checar segredos", "auditar antes de entregar ao cliente", "hacker acessa pelo frontend", "checar IDOR/SSRF/XSS", ou antes de tornar um repositório público, publicar app na loja, entregar código a terceiro, ou ligar multi-tenancy. Autossuficiente: cobre os fundamentos (segredos, RLS, auth, rate limit, pagamento, LLM, deploy, injeção) e vai além com aplicação web (IDOR, mass assignment, SSRF, XSS, CORS/CSRF, upload), iOS/Swift nativo, isolamento entre inquilinos, cadeia de suprimento/CI e limpeza de contexto interno.
+description: Auditoria de segurança em profundidade, com ferramentas determinísticas antes da análise por leitura, verificação adversarial de cada achado e relatório acionável. Use quando o usuário pedir "auditar segurança", "revisar segurança", "varredura de segurança", "tem vazamento?", "posso publicar isso?", "está seguro para open source?", "antes de publicar", "checar segredos", "auditar antes de entregar ao cliente", "hacker acessa pelo frontend", "checar IDOR/SSRF/XSS", "auditar meu agente/MCP", ou antes de tornar um repositório público, publicar app na loja, entregar código a terceiro, ou ligar multi-tenancy. Autossuficiente: cobre os fundamentos (segredos, RLS, auth, rate limit, pagamento, LLM, deploy, injeção) e vai além com aplicação web (IDOR, mass assignment, SSRF, XSS, CORS/CSRF, upload), backends fora de TS/JS (Python, Go, Ruby, PHP, Java), apps agênticos/LLM (injeção de prompt, MCP, agência excessiva), iOS/Swift nativo, isolamento entre inquilinos, cadeia de suprimento/CI e limpeza de contexto interno.
 license: MIT
 metadata:
-  version: "1.1"
+  version: "1.2"
 ---
 
 Auditoria de segurança para código que vai a produção, à loja, ao cliente ou ao público.
@@ -16,10 +16,14 @@ acrescenta as camadas e o processo que tornam o resultado confiável:
    melhor, mais barato e sem alucinar.
 2. **Verificação adversarial de cada achado** — auditoria por leitura tem taxa alta de falso
    positivo, e falso positivo treina o usuário a ignorar o relatório.
-3. **Aplicação web** — IDOR, mass assignment, SSRF, XSS, CORS/CSRF, upload, cabeçalhos. É a
-   camada do "ataque pelo frontend": ler suas rotas no navegador e bater direto na API.
-4. **iOS e Swift nativo** — camada que a maioria das skills de segurança web ignora.
-5. **Isolamento entre inquilinos, cadeia/CI e limpeza de contexto interno** — antes de
+3. **Aplicação web, em qualquer linguagem** — IDOR, mass assignment, SSRF, XSS, CORS/CSRF,
+   upload, cabeçalhos. É a camada do "ataque pelo frontend": ler suas rotas no navegador e
+   bater direto na API. Os padrões existem para TS/JS **e** para backends em Python, Go, Ruby,
+   PHP e Java — senão o furo é silencioso.
+4. **Apps agênticos e LLM** — injeção de prompt indireta, confiança em servidor MCP, agência
+   excessiva, exfiltração pelo canal de saída. A superfície nova, onde o dano não é só fatura.
+5. **iOS e Swift nativo** — camada que a maioria das skills de segurança web ignora.
+6. **Isolamento entre inquilinos, cadeia/CI e limpeza de contexto interno** — antes de
    multi-tenancy, antes de publicar e antes de abrir código.
 
 > Se você também tem a skill `vibe-security` instalada, ela aprofunda os oito fundamentos com
@@ -80,6 +84,19 @@ declarado é administrável; um furo silencioso é o que derruba.
 
 Rode primeiro. É barato, é preciso e reduz o que sobra para leitura.
 
+> **Atalho — rode a fase inteira de uma vez.** `scripts/fase0.sh` executa tudo desta seção,
+> degrada com elegância quando falta ferramenta (cada ausência já vira "NÃO COBERTO"), detecta
+> a linguagem do backend e imprime o mapa de cobertura pronto para o relatório. Prefira o
+> script; os blocos abaixo documentam o que ele faz e servem de fallback manual quando ele não
+> puder rodar.
+>
+> ```bash
+> bash scripts/fase0.sh .      # alvo = diretório atual; relatórios em .security-reports/fase0
+> ```
+>
+> Leia a saída e o mapa de cobertura antes de seguir para a Fase 1, usando as linguagens que
+> ele detectou.
+
 ### Segredos: histórico E árvore de trabalho, são varreduras diferentes
 
 **Armadilha que anula a varredura se ignorada:** `gitleaks detect` varre commits — arquivo
@@ -89,6 +106,8 @@ Rode os dois modos, sempre:
 ```bash
 # 1. histórico completo (remover em commit posterior NÃO remove do histórico)
 gitleaks detect --source . --redact --report-format json --report-path /tmp/gl-git.json
+# gitleaks >= 8.19 renomeou `detect` para `git` (a forma antiga ainda roda, com aviso).
+# scripts/fase0.sh detecta a versão e usa a forma certa sozinho.
 ```
 
 **Não rode `gitleaks dir .` na raiz de projeto JS** — ele desce em `node_modules` e não
@@ -191,9 +210,16 @@ configuração de deploy · injeção e validação de entrada.
 | Camada | Quando carregar | Referência |
 |---|---|---|
 | **Aplicação web** | há rota de API, server action ou endpoint HTTP no backend | `references/web-app.md` |
+| **Linguagens de backend** | o backend **não** é TS/JS (há `.py`, `.go`, `.rb`, `.php`, `.java`/`.kt`) | `references/linguagens-backend.md` |
+| **Apps agênticos / LLM** | há chamada a modelo, definição de ferramenta/tool, servidor MCP, RAG ou agente que age | `references/llm-agentes.md` |
 | **iOS e Swift nativo** | há `.swift`, `project.yml`, `Info.plist` ou `.xcodeproj` | `references/ios-nativo.md` |
 | **Isolamento entre inquilinos** | há coluna de organização, `tenant_id`, subdomínio por cliente, ou o projeto vai virar multi-tenant | `references/multi-tenancy.md` |
 | **Pré-publicação** | o repositório vai ficar público, o código vai para um cliente, ou é entrega open source | `references/pre-publicacao.md` |
+
+**Cobertura por linguagem, e ela é o que evita o furo silencioso:** `references/web-app.md`
+mostra os padrões em TS/JS; se o backend detectado na Fase 0 for outro, carregue
+`references/linguagens-backend.md` e aplique os padrões equivalentes. Reportar "autorização
+coberta" tendo olhado só `.ts` num projeto Python é o furo que a skill promete não ter.
 
 ### Autorização é o que a leitura acha e a ferramenta não
 
@@ -284,7 +310,9 @@ momento em que foi commitado.
 
 Se existir `.security-baseline.md` na raiz, leia antes de reportar e **omita o que estiver
 lá como risco aceito**, mencionando só a contagem: *"3 achados suprimidos pela linha de
-base"*. Ao encerrar, ofereça registrar os aceitos.
+base"*. Ao encerrar, ofereça registrar os aceitos — há um modelo pronto em
+`assets/baseline.example.md`. Credencial exposta nunca entra na linha de base: segredo se
+revoga, não se aceita.
 
 Formato de cada entrada da linha de base:
 
@@ -297,15 +325,17 @@ Formato de cada entrada da linha de base:
 Uma auditoria pontual não deixa nada "à prova de furos" — o que aproxima disso é o ciclo:
 
 1. **Persistir o relatório** em `.security-reports/AAAA-MM-DD.md` no repositório (e o JSON
-   do gitleaks ao lado). A próxima auditoria **diffa contra a anterior**: o que voltou é
-   regressão e sobe um nível de severidade.
+   do gitleaks ao lado — `scripts/fase0.sh` já salva em `.security-reports/fase0/`). A próxima
+   auditoria **diffa contra a anterior**: o que voltou é regressão e sobe um nível de severidade.
 2. **Cada achado corrigido vira verificação permanente.** Se o achado foi "token em log",
    nasce um grep no CI que falha se o padrão voltar; se foi "tabela sem RLS", nasce o teste
-   de isolamento. Achado que só vive no relatório volta.
+   de isolamento. Achado que só vive no relatório volta. O template `assets/security-ci.yml`
+   amarra gitleaks, osv-scanner e semgrep em cada push e PR — é o mínimo que faz a Fase 0
+   rodar sozinha.
 3. **Reauditar após as correções**, no mínimo a fase 0 inteira — correção de segurança
    introduz regressão com frequência irritante.
 4. **Se não há CI, isso é achado por si** (Média): nenhuma das verificações acima roda
-   sozinha, então tudo depende de alguém lembrar.
+   sozinha, então tudo depende de alguém lembrar. Ofereça o `assets/security-ci.yml`.
 
 ---
 
@@ -317,12 +347,18 @@ a referência aplicável. Prevenir é mais barato que auditar.
 
 ---
 
-## Referências
+## Referências, scripts e templates
 
+- `scripts/fase0.sh` — roda a Fase 0 inteira (segredos, chaves, deps, semgrep, detecção de
+  linguagem), degrada com elegância e emite o mapa de cobertura pronto.
 - `references/fundamentos.md` — as oito classes base: segredos, RLS/regras de banco, auth,
   rate limit, pagamento, LLM, deploy, injeção. Sempre aplicável.
 - `references/web-app.md` — IDOR/autorização por objeto, mass assignment, SSRF, XSS,
   CORS/CSRF, upload de arquivo, cabeçalhos de segurança, vazamento por erro e resposta.
+- `references/linguagens-backend.md` — os mesmos padrões (IDOR, mass assignment, SQL, SSRF)
+  em Python/Django/DRF, Ruby/Rails, PHP/Laravel, Go e Java/Kotlin/Spring.
+- `references/llm-agentes.md` — injeção de prompt indireta, confiança em servidor MCP e
+  tool poisoning, agência excessiva, exfiltração pelo canal de saída, saída do modelo como código.
 - `references/ios-nativo.md` — Keychain contra UserDefaults, Secure Enclave, ATS, área de
   transferência, exclusão de backup, capturas de tela, deep links, manifesto de privacidade.
 - `references/multi-tenancy.md` — isolamento entre organizações, RLS por inquilino,
@@ -331,3 +367,6 @@ a referência aplicável. Prevenir é mais barato que auditar.
   o que auditar antes de abrir o código ou entregar a um cliente.
 - `references/cadeia-e-ci.md` — GitHub Actions (`pull_request_target`, injeção via
   `${{ }}`, pin por SHA), Docker, lockfiles, scripts de instalação, EXIF em imagens.
+- `assets/security-ci.yml` — workflow mínimo que amarra gitleaks + osv-scanner + semgrep em
+  cada push e PR, fechando o ciclo.
+- `assets/baseline.example.md` — modelo de `.security-baseline.md` para registrar risco aceito.

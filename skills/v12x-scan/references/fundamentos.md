@@ -78,6 +78,9 @@ O nº 1 em criticidade de app gerado com IA.
   (`web-app.md` item 4). Se alimentar outra ação, tratar como entrada de usuário.
 - Injeção de prompt: entrada do usuário não pode sobrescrever a instrução de sistema em
   operação sensível.
+- **App agêntico (ferramentas, MCP, RAG, agente que age):** a superfície vai muito além disto —
+  injeção de prompt indireta, tool poisoning, agência excessiva, exfiltração pelo canal de
+  saída. Ver `references/llm-agentes.md`.
 
 ## 7. Configuração de deploy
 

@@ -7,6 +7,11 @@ defesa real está aqui, no servidor.
 Ordem de prioridade abaixo é por frequência e dano reais. IDOR e mass assignment são os que
 mais aparecem em código gerado com IA.
 
+> **Os `grep` desta referência casam idiomas de TS/JS** (`req.body`,
+> `dangerouslySetInnerHTML`, `queryRaw`). Se a Fase 0 detectou backend em Python, Go, Ruby,
+> PHP ou Java, os conceitos são os mesmos mas os padrões mudam — use
+> `references/linguagens-backend.md`, senão o furo é silencioso.
+
 ---
 
 ## 1. IDOR / autorização por objeto — o nº 1

@@ -11,8 +11,8 @@
     {
       "name": "v12x-scan",
       "source": "./skills/v12x-scan",
-      "description": "Auditoria de segurança em profundidade: ferramentas determinísticas antes da leitura, verificação adversarial de cada achado e relatório com veredito de publicação. Cobre aplicação web (IDOR, SSRF, XSS), iOS nativo, multi-tenancy, cadeia/CI e pré-publicação.",
-      "version": "1.1.0"
+      "description": "Auditoria de segurança em profundidade: ferramentas determinísticas antes da leitura, verificação adversarial de cada achado e relatório com veredito de publicação. Cobre aplicação web (IDOR, SSRF, XSS), backends fora de TS/JS (Python, Go, Ruby, PHP, Java), apps agênticos/LLM (injeção de prompt, MCP), iOS nativo, multi-tenancy, cadeia/CI e pré-publicação.",
+      "version": "1.2.0"
     }
   ]
 }

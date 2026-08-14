@@ -1,0 +1,56 @@
+# v12x-scan — CI de segurança mínimo.
+# Copie para .github/workflows/seguranca.yml no repositório auditado.
+#
+# Fecha o ciclo da skill: cada push e cada PR reroda a fase determinística, então
+# o que a auditoria corrigiu não volta sem alguém ver. Sem isso, todo achado
+# depende de alguém lembrar de reauditar.
+#
+# Por que instalar as CLIs em vez de usar ações prontas (references/cadeia-e-ci.md):
+# ação de TERCEIRO teria de ser pinada por SHA completo, senão a tag é móvel e o
+# compromisso da ação vira compromisso do seu CI. Aqui a ÚNICA ação é actions/checkout
+# (oficial — tag maior é aceitável); as ferramentas entram por versão explícita, que
+# você atualiza de propósito. Zero ação de terceiro para pinar ou apodrecer.
+
+name: seguranca
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read          # privilégio mínimo; este workflow é read-only e não usa segredo
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4          # ação OFICIAL; tag maior é aceitável
+        with:
+          fetch-depth: 0                   # histórico completo — gitleaks varre commits, não só a árvore
+
+      - name: gitleaks (histórico + árvore)
+        run: |
+          go install github.com/gitleaks/gitleaks/v8@v8.30.1     # versão explícita: atualize de propósito
+          "$(go env GOPATH)/bin/gitleaks" git . --redact --exit-code 1
+
+      - name: osv-scanner (multi-ecossistema)
+        run: |
+          go install github.com/google/osv-scanner/cmd/osv-scanner@v1.9.1
+          "$(go env GOPATH)/bin/osv-scanner" scan source -r ./
+
+      - name: semgrep (padrões estáticos)
+        run: |
+          pipx install semgrep==1.90.0 || pip install --user semgrep==1.90.0
+          semgrep --config=p/ci --error
+
+# Alternativa com ações prontas (mais curta, porém introduz ações de TERCEIRO):
+# se preferir este formato, pine CADA ação de terceiro por SHA completo — nunca por
+# tag — conforme references/cadeia-e-ci.md. actions/checkout por tag é aceitável.
+#
+#   - uses: actions/checkout@v4
+#     with: { fetch-depth: 0 }
+#   - uses: gitleaks/gitleaks-action@<SHA-completo>      # v2
+#   - uses: google/osv-scanner-action/osv-scanner-action@<SHA-completo>   # v1
+#     with: { scan-args: "-r ./" }
+#   - uses: semgrep/semgrep-action@<SHA-completo>        # v1
+#     with: { config: p/ci }
