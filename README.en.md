@@ -18,6 +18,7 @@ One repository, several skills, installable together as a plugin marketplace.
 | Skill | What it does |
 |---|---|
 | **[v12x-scan](skills/v12x-scan)** | In-depth security audit — deterministic tools before reading, adversarial verification of every finding, a report that ends in a publication verdict. Covers the fundamentals, web application (IDOR, SSRF, XSS), backends beyond TS/JS (Python, Go, Ruby, PHP, Java), agentic/LLM apps (prompt injection, MCP), native iOS, multi-tenancy, supply chain/CI, and pre-publication cleanup. Ships `scripts/fase0.sh` (the whole deterministic phase in one command) plus CI and baseline templates. |
+| **[v12x-agent-audit](skills/v12x-agent-audit)** | **Trust** audit for agents, MCP servers, and skills — before you install a third-party one or publish your own. Extracts the surface (tools, descriptions, permissions, dangerous patterns) without running the server and ends in an install/publish verdict. Covers tool-description poisoning, indirect prompt injection, excessive agency, exfiltration, and provenance/rug pull. Guidance is in Portuguese. |
 
 ## Install
 

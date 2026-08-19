@@ -13,6 +13,7 @@ Um repositório, várias skills, instaláveis de uma vez como marketplace de plu
 | Skill | O que faz |
 |---|---|
 | **[v12x-scan](skills/v12x-scan)** | Auditoria de segurança em profundidade — ferramentas determinísticas antes da leitura, verificação adversarial de cada achado, relatório com veredito de publicação. Cobre fundamentos, aplicação web (IDOR, SSRF, XSS), backends fora de TS/JS (Python, Go, Ruby, PHP, Java), apps agênticos/LLM (injeção de prompt, MCP), iOS nativo, multi-tenancy, cadeia/CI e pré-publicação. Traz `scripts/fase0.sh` (fase determinística num comando) e templates de CI e linha de base. |
+| **[v12x-agent-audit](skills/v12x-agent-audit)** | Auditoria de **confiança** de agentes, servidores MCP e skills — antes de instalar um de terceiro ou publicar o seu. Extrai a superfície (ferramentas, descrições, permissões, padrões perigosos) sem rodar o servidor e termina num veredito de instalação/publicação. Cobre envenenamento de descrição de ferramenta, injeção de prompt indireta, agência excessiva, exfiltração e proveniência/rug pull. |
 
 ## Instalar
 
