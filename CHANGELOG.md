@@ -6,6 +6,24 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o
 versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Cada entrada nomeia a **skill**
 afetada e a sua versão; o repositório reúne mais de uma skill sob o [Método v12x](METHOD.md).
 
+## [v12x-design-audit 1.0.0] — 2026-08-19
+
+Primeira versão. Auditoria de conformidade ao design system, com aplicação das trocas — para o
+caso em que o design system foi definido **depois** que as telas já existiam.
+
+### Adicionado
+- Arquitetura híbrida: `scripts/coletar-tela.js` varre o que é realmente pintado (a verdade) e
+  `scripts/coletar-codigo.sh` inventaria os valores hardcoded com `arquivo:linha` (onde trocar);
+  os dois se unem pelo valor bruto.
+- `scripts/mapear.py`: motor de mapeamento determinístico — ΔE CIEDE2000 para cor (distância
+  perceptual, não diferença de hex), distância absoluta para raio/espaço/tamanho, família
+  normalizada para fonte. Emite a tabela `valor usado → token` com confiança e o veredito.
+- Severidade por impacto visual e de marca; desvio repetido sobe de nível (é um componente
+  errado propagado, não N erros).
+- Referências: `cobertura-e-estados.md` (o que a varredura não vê — estados, temas, breakpoints,
+  modais — e como declarar) e `aplicacao-segura.md` (lotes do seguro ao arriscado, trocar no
+  componente e não nas folhas, usar o token e não o valor, verificar entre lotes).
+
 ## [v12x-agent-audit 1.0.0] — 2026-08-19
 
 Primeira versão. Auditoria de **confiança** de agentes, servidores MCP e skills — antes de
@@ -64,3 +82,4 @@ instalar um de terceiro ou publicar o seu.
 [v12x-agent-audit 1.0.0]: https://github.com/V12X/v12x-skills/tree/main/skills/v12x-agent-audit
 [v12x-scan 1.2.0]: https://github.com/V12X/v12x-skills/releases/tag/v1.2.0
 [v12x-scan 1.1.0]: https://github.com/V12X/v12x-skills/commit/2b08afe520e44b66a47aa34fc5efbd4f497359f5
+[v12x-design-audit 1.0.0]: https://github.com/V12X/v12x-skills/tree/main/skills/v12x-design-audit

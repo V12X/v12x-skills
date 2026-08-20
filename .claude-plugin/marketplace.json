@@ -4,8 +4,8 @@
     "name": "V12X"
   },
   "metadata": {
-    "description": "Skills de segurança e confiança da V12X para o Claude Code, seguindo o Método v12x.",
-    "version": "0.2.0"
+    "description": "Skills de auditoria de conformidade da V12X para o Claude Code, seguindo o Método v12x.",
+    "version": "0.3.0"
   },
   "plugins": [
     {
@@ -18,6 +18,12 @@
       "name": "v12x-agent-audit",
       "source": "./skills/v12x-agent-audit",
       "description": "Auditoria de confiança de agentes, servidores MCP e skills — antes de instalar um de terceiro ou publicar o seu. Extrai a superfície (ferramentas, descrições, permissões, padrões perigosos) sem rodar o servidor, verifica cada achado e termina num veredito de instalação/publicação. Cobre envenenamento de descrição de ferramenta, injeção de prompt indireta, agência excessiva, exfiltração pelo canal de saída, proveniência e rug pull.",
+      "version": "1.0.0"
+    },
+    {
+      "name": "v12x-design-audit",
+      "source": "./skills/v12x-design-audit",
+      "description": "Auditoria de conformidade ao design system, com aplicação das trocas. Varre tela a tela o que é realmente pintado, compara com os tokens (cor por ΔE perceptual, raio/espaço por distância, fonte por família), produz a tabela 'valor usado → token' e aplica os swaps com verificação. Para quando o design system foi definido depois das telas.",
       "version": "1.0.0"
     }
   ]
