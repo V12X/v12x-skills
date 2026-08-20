@@ -24,6 +24,17 @@ A coluna `confianca` do `mapa.json` decide:
 system está incompleto**. Um cinza usado em 20 lugares e sem token equivalente é um token
 faltando, não 20 erros.
 
+O mesmo vale para valor **abaixo da escala**: 16 ocorrências de `spacing: 2` num sistema cuja
+menor medida é 4 não são 16 erros — é um token ausente para um caso que o sistema não previu
+(no exemplo real: o respiro entre título e subtítulo, que é detalhe tipográfico e não
+espaçamento de layout). Trocar as 16 para 4px engordaria todas as pilhas de texto do app. A
+correção certa é **adicionar o token**, e a pergunta que decide é sempre: *o sistema previu este
+caso?*
+
+**Zero nunca é desvio.** `spacing: 0`, `cornerRadius: 0` e `padding(0)` significam "ausência
+desta propriedade", e nenhum design system tokeniza ausência. Reportá-los é ruído — e ruído em
+auditoria de design é o que faz o time parar de ler o relatório.
+
 ## 2. A ordem dos lotes — do seguro ao arriscado
 
 Aplique um lote, verifique, só então o próximo:

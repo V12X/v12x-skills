@@ -58,6 +58,16 @@ justamente onde a padronização vaza. Isso **entra no relatório como não cobe
 
 Os dois lados. Nenhum julgamento ainda — só inventário.
 
+> **Antes de coletar, veja de que é feito o alvo.** Web (CSS/TSX) e nativo (Swift) têm coletores
+> diferentes. Rodar o coletor errado acha **zero arquivos e diz que está tudo conforme** — o furo
+> silencioso na sua pior forma. Confirme sempre quantos arquivos foram varridos.
+>
+> | Alvo | Coletores |
+> |---|---|
+> | Web (CSS, TSX, Vue, Svelte) | `coletar-tela.js` + `coletar-codigo.sh` |
+> | **SwiftUI / iOS nativo** | `coletar-swift.py` (tokens e usados) — ver abaixo |
+> | Outra stack | nenhum coletor pronto: **declare como não coberto** e colete à mão |
+
 ### Tela (a verdade do que é pintado)
 
 `scripts/coletar-tela.js` roda no navegador e tabula cada valor visual com onde aparece. Uma
@@ -80,6 +90,29 @@ bash scripts/coletar-codigo.sh . > usados-codigo.json
 
 Coleta hex/px/font **hardcoded** com `arquivo:linha`, e **ignora** o que já usa token
 (`var(--x)`, `theme.x`, `$var`) — isso já é conforme.
+
+### SwiftUI / iOS nativo
+
+Não há navegador para varrer, e não é perda: **SwiftUI não tem cascata nem herança arbitrária de
+estilo**, então o valor escrito na view é o valor pintado — o código é a fonte fiel. A tela entra
+como verificação **visual** (captura antes/depois no simulador), não como extração de valores.
+
+```bash
+python3 scripts/coletar-swift.py tokens Packages/MeuDesign/Sources > tokens.json
+python3 scripts/coletar-swift.py usados App MeuDesign          > usados.json
+```
+
+O modo `tokens` extrai a norma do próprio pacote (`Color.adaptive(light: Color(hex:))`,
+`static let x: CGFloat`, tamanhos de `rubik(...)`); o modo `usados` varre o app **excluindo o
+pacote de design** (é lá que os tokens são legitimamente definidos) e pula linhas que já
+referenciam `Palette.`/`Layout.`/`Typography.`.
+
+Ele detecta o que importa num sistema acromático: **matiz nomeado** (`Color.red`, `.foregroundColor(.blue)`)
+é violação mesmo em linha "conforme", `Color(hex:)` hardcoded, `.font(.system(size:))`,
+`cornerRadius:` literal, `.padding(N)` e `spacing:` fora da escala.
+
+**Zero não é desvio.** `HStack(spacing: 0)` e `cornerRadius: 0` são idioma — "ausência de
+propriedade" —, e nenhum design system tem token para isso. O coletor descarta.
 
 ### Mapeamento (o coração determinístico)
 
@@ -201,7 +234,9 @@ Conformidade nasce barata e se aplica cara.
 ## Referências e scripts
 
 - `scripts/coletar-tela.js` — varredura do que é realmente pintado, tela a tela (somente leitura).
-- `scripts/coletar-codigo.sh` — inventário de valores hardcoded, com `arquivo:linha`.
+- `scripts/coletar-codigo.sh` — inventário de valores hardcoded (web), com `arquivo:linha`.
+- `scripts/coletar-swift.py` — SwiftUI/iOS: extrai os tokens do pacote de design (`tokens`) e
+  varre o app (`usados`), incluindo matiz nomeado — que em sistema acromático é violação.
 - `scripts/mapear.py` — motor de mapeamento: ΔE de cor, distância numérica, família de fonte;
   emite a tabela `valor → token` e o veredito.
 - `references/cobertura-e-estados.md` — o que uma varredura não vê, como varrer estados e temas,
