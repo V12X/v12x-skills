@@ -24,6 +24,22 @@ caso em que o design system foi definido **depois** que as telas já existiam.
   modais — e como declarar) e `aplicacao-segura.md` (lotes do seguro ao arriscado, trocar no
   componente e não nas folhas, usar o token e não o valor, verificar entre lotes).
 
+## [v12x-coherence 1.0.0] — 2026-08-25
+
+### Adicionado
+Primeira versão. Auditoria de **coerência visual sem design system** — infere a régua que o
+próprio app já usa e aponta onde ele se contradiz.
+- `scripts/coletar-geometria.js`: extrai a bounding box real de cada elemento no navegador (a
+  fonte de verdade do que está pintado — pega desalinhamento de 2-3px que o código esconde).
+- `scripts/inferir.py`: infere a borda/ritmo dominante e marca os quase-alinhados; separa
+  **defeito** (1-8px da régua, engano) de **decisão** (>8px, papel próprio); `--emitir-tokens`
+  grava a régua inferida, que alimenta a v12x-design-audit (pipeline inferir → propor → conformar).
+- Referências: `inferir-a-regua.md` (moda não média, defeito × decisão) e `alinhamento-e-ritmo.md`.
+- Provada num app real no navegador: certifica a tela limpa e, com 2 defeitos injetados (3px e
+  2px), marca os dois com a correção em px e ignora o elemento de papel diferente.
+- Nasce com a trava anti-improviso: mede e aponta, nunca refatora; o que não é geometria (ícone,
+  hierarquia de significado) entra no mapa de cobertura como não coberto.
+
 ## [v12x-design-audit 1.1.0] — 2026-08-25
 
 ### Corrigido
