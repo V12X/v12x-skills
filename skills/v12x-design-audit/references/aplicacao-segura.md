@@ -1,6 +1,20 @@
 # Aplicação segura das trocas
 
-Carregar quando for **aplicar** o mapeamento, não só reportar. Aqui a skill deixa de auditar e
+Carregar quando for **aplicar** o mapeamento, não só reportar.
+
+## Antes de tudo — a trava que não se contorna
+
+A aplicação é **mecânica**: `um literal → um token`, linha a linha, saído do `mapa.json`. Não é
+uma oportunidade de melhorar a tela. Num app real, o modelo "melhorou" e **removeu um toggle de
+tema** no meio de uma suposta auditoria — o oposto do que a skill promete.
+
+- **`git status` limpo antes de começar.** Sem isso, não dá para `git checkout`/`stash` desfazer
+  um escorregão. Se o repo está sujo, pare e peça para commitar/limpar antes.
+- **Cada troca passa no teste de uma linha:** o `git diff` daquela linha mostra **só** um valor
+  virando um token? Se removeu import, mudou prop, apagou handler, trocou ícone ou mexeu em
+  lógica — **você saiu da skill.** Reverta a linha e reporte como fora de escopo.
+- **Sem `mapa.json`, não se aplica nada.** Editar a partir de leitura de tela ou intuição é
+  improviso, não auditoria. Aqui a skill deixa de auditar e
 passa a mexer no layout — e uma troca errada num componente compartilhado quebra dezenas de telas
 de uma vez.
 

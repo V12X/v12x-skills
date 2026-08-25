@@ -24,7 +24,7 @@
       "name": "v12x-design-audit",
       "source": "./skills/v12x-design-audit",
       "description": "Auditoria de conformidade ao design system, com aplicação das trocas. Varre tela a tela o que é realmente pintado, compara com os tokens (cor por ΔE perceptual, raio/espaço por distância, fonte por família), produz a tabela 'valor usado → token' e aplica os swaps com verificação. Para quando o design system foi definido depois das telas.",
-      "version": "1.0.0"
+      "version": "1.1.0"
     }
   ]
 }

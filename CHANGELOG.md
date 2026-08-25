@@ -24,6 +24,22 @@ caso em que o design system foi definido **depois** que as telas já existiam.
   modais — e como declarar) e `aplicacao-segura.md` (lotes do seguro ao arriscado, trocar no
   componente e não nas folhas, usar o token e não o valor, verificar entre lotes).
 
+## [v12x-design-audit 1.1.0] — 2026-08-25
+
+### Corrigido
+- **Trava anti-improviso.** Numa auditoria real de um app híbrido, o modelo, em vez de rodar os
+  coletores, improvisou um refactor no lado web: trocou ícones (fora do escopo), reescreveu
+  assinaturas de componente e **removeu um toggle de tema** — o oposto de uma auditoria de
+  conformidade. O `SKILL.md` ganha três travas duras: sem `mapa.json` não se aplica nada;
+  aplicação é só `literal → token` linha a linha (proibido tocar em import, prop, lógica, ícone);
+  e o teste de uma linha no `git diff` antes de cada troca. `aplicacao-segura.md` carrega a mesma
+  trava e exige `git status` limpo antes de começar.
+
+### Adicionado
+- Seção "Fora de escopo — declare, não adivinhe": ícone, escolha semântica de token e estrutura
+  não são conformidade de valor, não são determinísticos, entram no mapa de cobertura como não
+  cobertos. Silêncio aqui é o furo que o modelo preenche com achismo (Tese 2).
+
 ## [v12x-agent-audit 1.0.0] — 2026-08-19
 
 Primeira versão. Auditoria de **confiança** de agentes, servidores MCP e skills — antes de

@@ -3,7 +3,7 @@ name: v12x-design-audit
 description: Auditoria de conformidade ao design system, com aplicação das trocas. Varre tela a tela o que é realmente pintado, compara com os tokens (cor por ΔE perceptual, raio/espaço por distância, fonte por família), produz a tabela "valor usado → token" e aplica os swaps com verificação. Use quando o usuário pedir "aplicar o design system", "padronizar o layout", "as fontes não foram trocadas", "substituir uma cor específica", "o corner dos campos está errado", "varrer tela a tela", "checar conformidade de UI", "o protótipo não segue o design system", "auditar UI/UX", ou ao aplicar um design system definido DEPOIS que as telas já existiam. Cobre cor, tipografia, raio, espaçamento e sombra, com mapa de cobertura declarando estados e telas não varridos.
 license: MIT
 metadata:
-  version: "1.0"
+  version: "1.1"
 ---
 
 Auditoria de **conformidade ao design system** — e a aplicação das trocas.
@@ -24,6 +24,27 @@ aplica; linter de código que nunca viu a tela reporta o que não aparece e perd
 As duas pontas se unem pelo **valor bruto** (`#3a3a3a`, `7px`, `Arial`), que é a chave comum.
 
 ---
+
+## Regra dura — sem improviso (leia antes de tocar em qualquer arquivo)
+
+Esta skill **não é uma licença para refatorar telas por bom senso.** O modelo tende a "melhorar"
+o que vê — e isso já apagou funcionalidade num app real (um toggle de tema removido no meio de uma
+suposta auditoria). Três travas, e nenhuma é opcional:
+
+1. **Sem coletor, sem auditoria.** Se você não rodou `mapear.py` e não tem um `mapa.json`, você
+   **não auditou** — você opinou. Proibido editar qualquer arquivo a partir de leitura de tela ou
+   de intuição. O relatório sai do `mapa.json`, não da sua impressão.
+2. **Aplicação é mecânica e nada mais.** A única mudança permitida é substituir um **valor bruto
+   por um token**, linha a linha, exatamente como o `mapa.json` manda. É **proibido** tocar em
+   import, prop, assinatura de componente, lógica, condicional, ícone, ou qualquer comportamento.
+   Se a troca exige mexer em algo além do valor, ela **não é desta skill** — reporte e pare.
+3. **O que a ferramenta não mede, a skill não troca — e declara.** Ícone certo para o significado,
+   escolha semântica de token, "esse componente devia ser outro" — nada disso é conformidade de
+   valor, nada disso é determinístico, e o modelo **não deve adivinhar**. Entra no mapa de
+   cobertura como **não coberto**, e o código fica como está.
+
+Se, ao aplicar, você se pegar reescrevendo um componente em vez de trocando um literal por um
+token: **pare.** Isso é o improviso que esta skill existe para não fazer.
 
 ## Por que não existe pontuação
 
@@ -114,6 +135,20 @@ Ele detecta o que importa num sistema acromático: **matiz nomeado** (`Color.red
 **Zero não é desvio.** `HStack(spacing: 0)` e `cornerRadius: 0` são idioma — "ausência de
 propriedade" —, e nenhum design system tem token para isso. O coletor descarta.
 
+### Fora de escopo — declare, não adivinhe
+
+O coletor mede **valor** (cor, tipografia, raio, espaço, sombra). Ele **não** julga:
+
+- **ícone** — nem "asset certo para o significado", nem alinhar o ícone da tela ao catálogo do
+  design system. Isso é escolha semântica, não distância de valor;
+- **qual token semântico** é o certo quando o valor já é um token (usar `radiusS` onde caberia
+  `radiusM` não é hardcoded — é decisão de design);
+- **estrutura** — se um componente devia ser outro.
+
+Nada disso é determinístico, então **nada disso o modelo troca.** Tudo entra no mapa de cobertura
+como **não coberto**, com uma linha dizendo o que ficou de fora e por quê. Silêncio aqui é o furo
+que faz o modelo preencher o vácuo com achismo.
+
 ### Mapeamento (o coração determinístico)
 
 ```bash
@@ -203,6 +238,12 @@ Depois, para cada achado: `valor → token`, ocorrências, onde, e a nota de con
 
 **A aplicação** segue `references/aplicacao-segura.md` — em lotes por tipo, do mais seguro para o
 mais arriscado, com verificação na tela depois de cada lote. Nunca troque tudo de uma vez.
+
+**Antes de aplicar, o teste de uma linha:** cada troca é `um literal → um token`, e o `git diff`
+daquela linha mostra **só isso**? Se o diff removeu um import, mudou uma prop, apagou um handler
+ou trocou um ícone, você saiu da skill (Regra dura, item 2) — reverta a linha e reporte como "fora
+do escopo desta skill". Um `git status` limpo antes de começar é obrigatório, para que
+`git checkout`/`stash` desfaça qualquer troca que escape.
 
 ### Linha de base
 
