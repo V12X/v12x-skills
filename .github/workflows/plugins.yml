@@ -1,0 +1,15 @@
+# Smoke test de empacotamento — o plugin que não instala é a pior falha de
+# reputação para uma suíte cujo produto é confiança. Roda a cada push e PR.
+name: plugins
+on:
+  push: { branches: [main] }
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  empacotamento:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4   # ação oficial; pinar por SHA se preferir
+      - name: smoke test de empacotamento
+        run: python3 scripts/smoke-plugins.py

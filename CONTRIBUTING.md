@@ -13,6 +13,12 @@ confirme que está tudo limpo:
 bash skills/v12x-scan/scripts/fase0.sh .
 ```
 
+E valide o empacotamento (o CI roda isto a cada push):
+
+```bash
+python3 scripts/smoke-plugins.py
+```
+
 O que precisa passar antes de subir:
 
 - `gitleaks` limpo no **histórico** e na **árvore** (incluindo arquivos ignorados).

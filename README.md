@@ -18,6 +18,8 @@ Um repositório, várias skills, instaláveis de uma vez como marketplace de plu
 
 ## Instalar
 
+> Passo a passo testado, com solução de problemas, em **[INSTALL.md](INSTALL.md)**.
+
 ### Como marketplace de plugin (recomendado)
 
 No Claude Code:

@@ -23,6 +23,8 @@ One repository, several skills, installable together as a plugin marketplace.
 
 ## Install
 
+> Tested step-by-step, with troubleshooting, in **[INSTALL.md](INSTALL.md)**.
+
 ### As a plugin marketplace (recommended)
 
 In Claude Code:
