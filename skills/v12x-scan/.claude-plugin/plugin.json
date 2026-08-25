@@ -1,0 +1,7 @@
+{
+  "name": "v12x-scan",
+  "description": "Auditoria de segurança em profundidade: determinística, verificada, com veredito de publicação. Método v12x.",
+  "version": "1.2.0",
+  "author": { "name": "V12X" },
+  "homepage": "https://github.com/V12X/v12x-skills"
+}
