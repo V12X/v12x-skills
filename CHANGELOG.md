@@ -24,6 +24,18 @@ caso em que o design system foi definido **depois** que as telas já existiam.
   modais — e como declarar) e `aplicacao-segura.md` (lotes do seguro ao arriscado, trocar no
   componente e não nas folhas, usar o token e não o valor, verificar entre lotes).
 
+## [v12x-coherence 1.0.1] — 2026-08-25
+
+### Corrigido
+Calibração no primeiro projeto web bagunçado real (uma landing de 2 colunas). O motor v1.0,
+testado só numa tela de uma coluna, produzia ruído em layout real: marcava membros da própria
+linha como desvio (sub-pixel, "puxar +0px") e comparava bordas de **regiões diferentes** (borda
+direita de um item de menu contra a dos cards de um mockup). Dois consertos: `MIN_DEFECT` (1,5px)
+descarta sub-pixel, e o alinhamento passa a agrupar por **coluna** (borda esquerda) e só comparar
+a borda direita **dentro** da coluna. Resultado no alvo real: de 8 achados-lixo para 1 sinal
+legítimo (o horário da status bar, 6px indentado — para julgamento humano). Provado nos três
+cenários: tela limpa fica quieta, 3px/2px injetados são pegos, ruído sai.
+
 ## [v12x-coherence 1.0.0] — 2026-08-25
 
 ### Adicionado

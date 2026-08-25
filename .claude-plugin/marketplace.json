@@ -30,7 +30,7 @@
       "name": "v12x-coherence",
       "source": "./skills/v12x-coherence",
       "description": "Auditoria de coerência visual sem design system: infere a régua do próprio app (alinhamento, espaçamento, raio, tipografia) e aponta onde ele se contradiz — desalinhamentos de 2-3px, espaçamento fora da própria escala. Mede geometria real no navegador. Método v12x.",
-      "version": "1.0.0"
+      "version": "1.0.1"
     }
   ]
 }

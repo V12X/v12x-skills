@@ -1,7 +1,9 @@
 {
   "name": "v12x-coherence",
   "description": "Auditoria de coerência visual sem design system: infere a régua do próprio app e aponta desalinhamentos, espaçamento e raio fora da própria escala. Método v12x.",
-  "version": "1.0.0",
-  "author": { "name": "V12X" },
+  "version": "1.0.1",
+  "author": {
+    "name": "V12X"
+  },
   "homepage": "https://github.com/V12X/v12x-skills"
 }

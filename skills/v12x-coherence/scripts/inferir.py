@@ -20,6 +20,7 @@ Regra dura: este script SÓ mede e reporta. Ele não edita arquivo nenhum.
 import json, sys, glob
 from collections import Counter
 
+MIN_DEFECT = 1.5 # px: abaixo disto é sub-pixel/mesma linha, não defeito
 NEAR = 8.0   # px: dentro disto da borda dominante = quase-alinhado = DEFEITO
              #     além disto = alinhamento próprio = decisão, ignora
 
@@ -48,18 +49,32 @@ def dominante(vals, tol=1.5):
     return (c[0][0], len(c[0][1])) if c else (None, 0)
 
 def alinhamento(tela, achados):
-    its = [i for i in tela['items'] if i['W'] < tela.get('vw', 99999) - 1]
-    for eixo, key in (('borda esquerda', 'L'), ('borda direita', 'R')):
-        vals = [i[key] for i in its]
-        dom, n = dominante(vals)
-        if dom is None or n < 3:      # sem uma linha forte, não há norma implícita
+    vw = tela.get('vw', 99999)
+    its = [i for i in tela['items'] if i['W'] < vw - 1]
+    # COLUNAS: agrupa por borda esquerda; uma coluna real tem >=3 elementos
+    cols = [c for c in cluster1d([i['L'] for i in its], tol=2) if len(c[1]) >= 3]
+    for center, membros in cols:
+        col = [i for i in its if abs(i['L'] - center) <= NEAR]        # membros e quase-membros
+        forte = sum(1 for i in col if abs(i['L'] - center) <= 2)       # base da linha
+        if forte < 3:
             continue
-        for i in its:
-            d = round(i[key] - dom, 1)
-            if 0 < abs(d) <= NEAR:    # quase-alinhado = defeito
-                sev = 'alta' if n >= 4 and abs(d) >= 2 else 'media'
+        # borda esquerda: fora por MIN_DEFECT..NEAR = defeito (sub-pixel não conta)
+        for i in col:
+            d = round(i['L'] - center, 1)
+            if MIN_DEFECT <= abs(d) <= NEAR:
+                sev = 'alta' if forte >= 4 and abs(d) >= 2 else 'media'
                 achados.append((sev, tela['screen'],
-                    f"{i['el']}: {eixo} em {i[key]}px, {d:+.0f}px da linha do app ({dom}px, {n} elementos) — puxar {-d:+.0f}px"))
+                    f"{i['el']}: borda esquerda em {i['L']}px, {d:+.1f}px da coluna do app "
+                    f"({center}px, {forte} elementos) — puxar {-d:+.1f}px"))
+        # borda direita SÓ entre quem é desta coluna (evita comparar regiões diferentes)
+        rc, rn = dominante([i['R'] for i in col])
+        if rn >= 3:
+            for i in col:
+                d = round(i['R'] - rc, 1)
+                if MIN_DEFECT <= abs(d) <= NEAR:
+                    achados.append(('media', tela['screen'],
+                        f"{i['el']}: borda direita em {i['R']}px, {d:+.1f}px da coluna ({rc}px) — puxar {-d:+.1f}px"))
+
 
 def ritmo(tela, achados):
     its = sorted([i for i in tela['items'] if i['W'] < tela.get('vw', 99999) - 1], key=lambda i: i['T'])
@@ -76,7 +91,7 @@ def ritmo(tela, achados):
         return
     for g, a, b in gaps:
         d = round(g - dom, 1)
-        if 0 < abs(d) <= NEAR:
+        if MIN_DEFECT <= abs(d) <= NEAR:
             achados.append(('media', tela['screen'],
                 f"ritmo: {a} → {b} com gap {g}px, {d:+.0f}px do ritmo do app ({dom}px)"))
 
