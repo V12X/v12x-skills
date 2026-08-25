@@ -61,6 +61,17 @@ Toda skill da V12X tem a mesma **impressão digital**:
 Se você vê prosa solta, sem contagem e sem veredito, o modelo improvisou a partir
 da sua frase. Repita nomeando a skill explicitamente (caminho **b**).
 
+
+## Instalação manual (web/desktop, sem `/plugin`)
+
+Onde `/plugin` não existe (app web/desktop, SDK), copie as skills para `~/.claude/skills/` com um comando, do clone do repo:
+
+```bash
+bash scripts/sync-skills.sh
+```
+
+Rode de novo sempre que atualizar uma skill (a cópia não se atualiza sozinha) e **reinicie a sessão**. `--dry-run` mostra o que faria sem copiar.
+
 ## Solução de problemas
 
 | Sintoma | Causa | O que fazer |
