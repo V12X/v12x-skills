@@ -31,7 +31,9 @@
       W: +r.width.toFixed(1), H: +r.height.toFixed(1),
       cx: +((r.left + r.right) / 2).toFixed(1),
       fs: isText ? Math.round(parseFloat(cs.fontSize) * 10) / 10 : null,
-      fw: isText ? cs.fontWeight : null
+      fw: isText ? cs.fontWeight : null,
+      br: (cs.borderTopLeftRadius || '0').includes('%') ? 9999   // 9999 = pílula/círculo (papel próprio)
+          : Math.round(parseFloat(cs.borderTopLeftRadius || '0') * 10) / 10
     });
   });
   return JSON.stringify({ screen: SCREEN, vw: innerWidth, theme: document.documentElement.dataset.theme || 'default', items: out }, null, 0);

@@ -3,7 +3,7 @@ name: v12x-coherence
 description: Auditoria de coerência visual — SEM depender de um design system. Infere a régua que o próprio app já usa (alinhamento, espaçamento, raio, tipografia) a partir dos valores medidos e aponta onde o app se contradiz: desalinhamentos de 2-3px que o olho sente e não nomeia, espaçamento fora da própria escala, raios misturados, sprawl de tipografia. Mede geometria real no navegador (bounding boxes), separa defeito de decisão, e termina num veredito. Use quando o usuário pedir "conferir alinhamento tela a tela", "as telas estão desalinhadas", "espaçamento inconsistente", "unificar os cantos", "conferir margens", "deixar a interface premium/coerente", "polir a UI", "rastrear desalinhamento entre textos e ícones", ou quando NÃO há design system definido e mesmo assim é preciso padronizar. Opcionalmente gera os tokens da régua inferida, que alimentam a v12x-design-audit. Não julga gosto nem hierarquia de significado — mede consistência.
 license: MIT
 metadata:
-  version: "1.0.2"
+  version: "1.0.3"
 ---
 
 Auditoria de **coerência visual** — a que você faz à mão, tela a tela, procurando o texto

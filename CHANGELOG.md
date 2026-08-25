@@ -24,6 +24,15 @@ caso em que o design system foi definido **depois** que as telas já existiam.
   modais — e como declarar) e `aplicacao-segura.md` (lotes do seguro ao arriscado, trocar no
   componente e não nas folhas, usar o token e não o valor, verificar entre lotes).
 
+## [v12x-coherence 1.0.3] — 2026-08-25
+
+### Adicionado
+- **Raio de canto**, a última parte que a descrição prometia e não fazia. O coletor captura
+  `border-radius` (pílula `50%`/`999px` vira sentinela de "papel próprio"); o motor ignora `0`
+  (ausência = decisão) e pílula, e entre os raios reais marca os consecutivos a <=3px (mesmo canto,
+  dois valores) e sinaliza sprawl quando há >=4 distintos. Calibrado no Quezty real: achou 18px e
+  20px quase-iguais e 4 raios distintos (14/18/20/26) — cantos misturados.
+
 ## [v12x-coherence 1.0.2] — 2026-08-25
 
 ### Adicionado

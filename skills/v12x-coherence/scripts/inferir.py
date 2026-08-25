@@ -137,6 +137,26 @@ def tipografia(telas, achados):
     return len(tam)
 
 
+def raios(telas, achados):
+    """Raio: 0 é ausência (decisão), pílula (>=48px ou %) é papel próprio. Entre os raios REAIS,
+    dois valores consecutivos a <=3px = provável mesmo canto com dois valores; muitos = sprawl."""
+    from collections import Counter
+    brs = [int(i['br'] + 0.5) for t in telas for i in t['items']
+           if i.get('br') is not None and 0 < i['br'] < 48]
+    if len(brs) < 3:
+        return None
+    cont = Counter(brs)
+    sizes = sorted(cont)
+    for a, b in zip(sizes, sizes[1:]):
+        if b - a <= 3:
+            achados.append(('media', '—',
+                f"raio {a}px ({cont[a]}x) e {b}px ({cont[b]}x) diferem {b-a}px — provável mesmo canto, dois valores"))
+    if len(cont) >= 4:
+        usos = ', '.join(f"{r}px×{c}" for r, c in sorted(cont.items()))
+        achados.append(('baixa', '—', f"{len(cont)} raios distintos ({usos}) — unificar a escala de cantos"))
+    return len(cont)
+
+
 def main():
     args = sys.argv[1:]
     emitir = None
@@ -154,6 +174,7 @@ def main():
         ritmo(t, achados)
     escala_larguras(telas, achados)
     n_tipos = tipografia(telas, achados)
+    n_raios = raios(telas, achados)
 
     ordem = {'critica':0, 'alta':1, 'media':2, 'baixa':3}
     achados.sort(key=lambda a: ordem.get(a[0], 9))
@@ -164,6 +185,7 @@ def main():
     print("=" * 74)
     print(f"telas: {', '.join(t['screen'] for t in telas)}   ·   elementos medidos: {sum(len(t['items']) for t in telas)}")
     if n_tipos: print(f"tamanhos de fonte distintos: {n_tipos}" + ("  ← sprawl de escala" if n_tipos > 8 else ""))
+    if n_raios: print(f"raios de canto distintos: {n_raios}" + ("  ← cantos misturados" if n_raios > 3 else ""))
     print("desvios: " + " · ".join(f"{cont.get(s,0)} {s}" for s in ('alta','media','baixa')))
     if not achados:
         print("VEREDITO: coerente nos eixos medidos. As telas se alinham à própria régua.")
