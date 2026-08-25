@@ -107,6 +107,36 @@ def escala_larguras(telas, achados):
                 achados.append(('baixa', '—',
                     f"largura {ct}px aparece {len(g)}x, a {abs(perto[0]-ct):.0f}px da largura recorrente {perto[0]}px — provável quase-igual"))
 
+def tipografia(telas, achados):
+    """Sprawl de escala: muitos tamanhos apertados na mesma faixa = hierarquia inflada.
+    Arredonda para inteiro (o sub-pixel do rem colapsa; o sprawl real fica) e reporta a
+    FAIXA aglomerada, não par a par."""
+    from collections import Counter
+    fss = [i['fs'] for t in telas for i in t['items'] if i.get('fs')]
+    if len(fss) < 4:
+        return None
+    ints = Counter(int(v + 0.5) for v in fss)
+    tam = sorted(ints.items())                       # (tamanho inteiro, uso)
+    bandas, cur = [], [tam[0]]
+    for a, b in zip(tam, tam[1:]):
+        if b[0] - a[0] <= 2:
+            cur.append(b)
+        else:
+            bandas.append(cur)
+            cur = [b]
+    bandas.append(cur)
+    for banda in bandas:
+        if len(banda) >= 3:                          # 3+ tamanhos numa faixa apertada
+            lo, hi = banda[0][0], banda[-1][0]
+            dom = max(banda, key=lambda x: x[1])
+            usos = ', '.join(f"{s}px×{c}" for s, c in banda)
+            sev = 'alta' if len(banda) >= 5 else 'media'
+            achados.append((sev, '—',
+                f"tipografia: {len(banda)} tamanhos entre {lo}-{hi}px disputam o mesmo papel "
+                f"({usos}) — colapsar para o dominante {dom[0]}px"))
+    return len(tam)
+
+
 def main():
     args = sys.argv[1:]
     emitir = None
@@ -123,6 +153,7 @@ def main():
         alinhamento(t, achados)
         ritmo(t, achados)
     escala_larguras(telas, achados)
+    n_tipos = tipografia(telas, achados)
 
     ordem = {'critica':0, 'alta':1, 'media':2, 'baixa':3}
     achados.sort(key=lambda a: ordem.get(a[0], 9))
@@ -132,6 +163,7 @@ def main():
     print("COERÊNCIA VISUAL — régua inferida do próprio app (sem design system)")
     print("=" * 74)
     print(f"telas: {', '.join(t['screen'] for t in telas)}   ·   elementos medidos: {sum(len(t['items']) for t in telas)}")
+    if n_tipos: print(f"tamanhos de fonte distintos: {n_tipos}" + ("  ← sprawl de escala" if n_tipos > 8 else ""))
     print("desvios: " + " · ".join(f"{cont.get(s,0)} {s}" for s in ('alta','media','baixa')))
     if not achados:
         print("VEREDITO: coerente nos eixos medidos. As telas se alinham à própria régua.")

@@ -23,12 +23,15 @@
     const label = (tag + (txt ? ' “' + txt + '”' : '')).slice(0, 34);
     const key = [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)].join(',');
     if (seen.has(key)) return; seen.add(key);
+    const isText = el.children.length === 0 && txt && tag !== 'input';
     out.push({
       screen: SCREEN, el: label,
       L: +r.left.toFixed(1), R: +r.right.toFixed(1),
       T: +r.top.toFixed(1), B: +r.bottom.toFixed(1),
       W: +r.width.toFixed(1), H: +r.height.toFixed(1),
-      cx: +((r.left + r.right) / 2).toFixed(1)
+      cx: +((r.left + r.right) / 2).toFixed(1),
+      fs: isText ? Math.round(parseFloat(cs.fontSize) * 10) / 10 : null,
+      fw: isText ? cs.fontWeight : null
     });
   });
   return JSON.stringify({ screen: SCREEN, vw: innerWidth, theme: document.documentElement.dataset.theme || 'default', items: out }, null, 0);

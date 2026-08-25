@@ -24,6 +24,20 @@ caso em que o design system foi definido **depois** que as telas já existiam.
   modais — e como declarar) e `aplicacao-segura.md` (lotes do seguro ao arriscado, trocar no
   componente e não nas folhas, usar o token e não o valor, verificar entre lotes).
 
+## [v12x-coherence 1.0.2] — 2026-08-25
+
+### Adicionado
+- **Escala de tipografia**, que a v1.0 descrevia mas não implementava. O coletor passa a capturar
+  `font-size`/`font-weight` de cada texto; o motor conta os tamanhos distintos e reporta as
+  **faixas aglomeradas** (ex.: "10 tamanhos entre 8-18px disputam o papel de corpo — colapsar para
+  15px"), não par a par.
+- **Ritmo vertical**: gap entre elementos empilhados vs. o ritmo dominante; o intruso é marcado.
+
+### Corrigido (calibração no Quezty real)
+- Tipografia passou por 3 bugs pegos por dado real: ruído par-a-par (vira faixa), aliasing de lista
+  no agrupamento, e encadeamento guloso do `cluster1d` que escondia a faixa densa (arredonda para
+  inteiro antes de agrupar). Cada conserto provado com teste.
+
 ## [v12x-coherence 1.0.1] — 2026-08-25
 
 ### Corrigido
