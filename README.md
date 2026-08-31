@@ -65,7 +65,7 @@ O manifesto completo, com o porquê e um contraexemplo de cada tese, está em [M
 
 ## Changelog
 
-Mudanças por versão em [CHANGELOG.md](CHANGELOG.md). A versão atual é a
+Mudanças por versão em [CHANGELOG.md](CHANGELOG.md). Esquema de versões (skill × marketplace) em [VERSIONING.md](VERSIONING.md).. A versão atual é a
 [v1.2.0](https://github.com/V12X/v12x-skills/releases/tag/v1.2.0).
 
 ## Licença

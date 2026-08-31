@@ -38,15 +38,12 @@ Contexto interno não vaza para um repositório público: ver
 - Ferramenta antes de opinião; nenhum furo silencioso; verificação antes de reportar — os três
   princípios do `README`.
 
-## Versão: mantenha os três lugares em sincronia
+## Versão
 
-Ao subir a versão de uma skill, atualize os **três** ao mesmo tempo:
+O esquema (versão por skill em SemVer + versão do marketplace) está em
+[VERSIONING.md](VERSIONING.md), com o checklist de onde tocar ao subir uma versão. O
+`scripts/smoke-plugins.py` (no CI) confere que os manifestos batem.
 
-1. `skills/<skill>/SKILL.md` — `metadata.version`
-2. `.claude-plugin/marketplace.json` — `plugins[].version`
-3. A tag/release do GitHub (`vX.Y.Z`)
-
-O versionamento segue [SemVer](https://semver.org/lang/pt-BR/).
 
 ## Changelog e release
 

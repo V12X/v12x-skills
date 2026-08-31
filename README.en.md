@@ -73,7 +73,7 @@ The full manifesto, with the reasoning and a counterexample for each thesis, is 
 
 ## Changelog
 
-Per-version changes in [CHANGELOG.md](CHANGELOG.md). Current version is
+Per-version changes in [CHANGELOG.md](CHANGELOG.md). Versioning scheme (per-skill vs marketplace) in [VERSIONING.md](VERSIONING.md).. Current version is
 [v1.2.0](https://github.com/V12X/v12x-skills/releases/tag/v1.2.0).
 
 ## License
