@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "Skills de auditoria de conformidade da V12X para o Claude Code, seguindo o Método v12x.",
-    "version": "0.4.0"
+    "version": "0.5.0"
   },
   "plugins": [
     {
@@ -31,6 +31,12 @@
       "source": "./skills/v12x-coherence",
       "description": "Auditoria de coerência visual sem design system: infere a régua do próprio app (alinhamento, espaçamento, raio, tipografia) e aponta onde ele se contradiz — desalinhamentos de 2-3px, espaçamento fora da própria escala. Mede geometria real no navegador. Método v12x.",
       "version": "1.0.3"
+    },
+    {
+      "name": "v12x-flow",
+      "source": "./skills/v12x-flow",
+      "description": "Scan de fluxo e usabilidade que OPERA o app, não opina sobre o print: dirige tarefa por tarefa, instrumenta console/rede/controles, e separa o que está quebrado (fato) do que é fricção medível e do que é julgamento (opinião rotulada). Web via navegador, nativo via simulador. Veredito por bloqueadores, nunca nota.",
+      "version": "1.0.0"
     }
   ]
 }

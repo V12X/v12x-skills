@@ -24,6 +24,22 @@ caso em que o design system foi definido **depois** que as telas já existiam.
   modais — e como declarar) e `aplicacao-segura.md` (lotes do seguro ao arriscado, trocar no
   componente e não nas folhas, usar o token e não o valor, verificar entre lotes).
 
+## [v12x-flow 1.0.0] — 2026-08-27
+
+### Adicionado
+Quinta skill do Método v12x. Scan de fluxo e usabilidade que **opera** o app, não opina sobre o
+print — o diferencial que a separa dos revisores de UX de IA genéricos.
+- `scripts/instrumentar.js`: audita um estado no navegador (alvo de toque <44px, campo sem label
+  programático, form sem validação, controle morto, erros de runtime acumulados).
+- Três camadas rotuladas: **quebrado** (fato, dirige o veredito), **fricção medível** (fato-proxy)
+  e **julgamento** (opinião amarrada a heurística nomeada + caso concreto, nunca vibe).
+- Referências: `dirigir-fluxos.md` (tarefa por tarefa, os estados esquecidos — vazio/carregando/
+  erro, cobertura de fluxos, o caso nativo) e `medido-vs-julgamento.md` (a fronteira honesta).
+- Provado drive-first no web do eazyspace: dirigindo o login achou o botão "Entrar" que é **no-op
+  no submit vazio** (nenhuma requisição, sem `required`, sem erro) — invisível num screenshot —,
+  erro de console na carga, campos só-placeholder e alvo de toque de 33x20px.
+- Nasce com a trava anti-improviso (dirige e registra, não refatora) e o veredito por bloqueadores.
+
 ## [v12x-coherence 1.0.3] — 2026-08-25
 
 ### Adicionado

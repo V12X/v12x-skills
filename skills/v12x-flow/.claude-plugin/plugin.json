@@ -1,0 +1,7 @@
+{
+  "name": "v12x-flow",
+  "description": "Scan de fluxo e usabilidade que OPERA o app (não opina sobre o print): dirige tarefa por tarefa, instrumenta console/rede/controles, separa quebrado (fato) de fricção e de julgamento. Método v12x.",
+  "version": "1.0.0",
+  "author": { "name": "V12X" },
+  "homepage": "https://github.com/V12X/v12x-skills"
+}
