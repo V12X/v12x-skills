@@ -3,7 +3,7 @@ name: v12x-scan
 description: Auditoria de segurança em profundidade, com ferramentas determinísticas antes da análise por leitura, verificação adversarial de cada achado e relatório acionável. Use quando o usuário pedir "auditar segurança", "revisar segurança", "varredura de segurança", "tem vazamento?", "posso publicar isso?", "está seguro para open source?", "antes de publicar", "checar segredos", "auditar antes de entregar ao cliente", "hacker acessa pelo frontend", "checar IDOR/SSRF/XSS", "auditar meu agente/MCP", ou antes de tornar um repositório público, publicar app na loja, entregar código a terceiro, ou ligar multi-tenancy. Autossuficiente: cobre os fundamentos (segredos, RLS, auth, rate limit, pagamento, LLM, deploy, injeção) e vai além com aplicação web (IDOR, mass assignment, SSRF, XSS, CORS/CSRF, upload), backends fora de TS/JS (Python, Go, Ruby, PHP, Java), apps agênticos/LLM (injeção de prompt, MCP, agência excessiva), iOS/Swift nativo, isolamento entre inquilinos, cadeia de suprimento/CI e limpeza de contexto interno.
 license: MIT
 metadata:
-  version: "1.2"
+  version: "1.3"
 ---
 
 Auditoria de segurança para código que vai a produção, à loja, ao cliente ou ao público.
@@ -237,6 +237,14 @@ gerado com IA:
 - Ações de administrador conferem papel **no servidor**, e não só escondem o botão?
 - O identificador do usuário vem da **sessão**, e nunca do corpo da requisição?
 
+**Autorização não se amostra — varre-se.** Um scanner pode amostrar; autorização não. Basta
+**um** handler sem checagem de posse para o dado vazar, então percorra **todos** os handlers de
+rota que recebem um identificador ou fazem escrita, um a um, e cruze **cada** gate de papel do
+frontend (`isAdmin`, `canEdit`, `role`) com o endpoint correspondente — confirmando que o
+servidor valida o privilégio. "Revisei as principais rotas" não é cobertura; é a rota que você
+não abriu que vaza. Se a lista de rotas for grande demais para varrer inteira, isso **entra no
+mapa de cobertura** como amostrado, nunca como coberto.
+
 ---
 
 ## Fase 2 — Verificação adversarial
@@ -295,6 +303,22 @@ NÃO COBERTO: osv-scanner ausente (SwiftPM sem audit) · sem teste dinâmico ·
 **O mapa de cobertura é obrigatório.** É a diferença entre "não achei nada" e "não olhei".
 Um leitor precisa saber exatamente o que esta auditoria não viu.
 
+### Verificado e sólido (a prova de que a auditoria trabalhou)
+
+Depois do mapa de cobertura, liste em uma ou duas linhas **o que foi verificado e está
+correto**, com evidência — não só o que está errado:
+
+```
+SÓLIDO: router de documentos valida posse em todos os 14 handlers (routes/docs.ts) ·
+        RLS ativo e derivado de auth.uid() em todas as tabelas com tenant_id ·
+        segredos só via env, sem default embutido
+```
+
+Isto não é enfeite: um relatório que só lista problemas não prova que **olhou** o resto. "Auth
+verificada e correta em X" é a contraparte positiva do mapa de cobertura — mostra que a categoria
+foi varrida, não pulada, e é o que separa "não achei IDOR" de "confirmei posse em cada rota".
+Nunca invente um ponto forte: só entra o que foi de fato verificado, com o arquivo.
+
 Para cada achado:
 
 **`caminho/arquivo.ts:42` — Nome específico da falha**
@@ -305,6 +329,28 @@ código real do projeto e não exemplo genérico.
 Feche com uma lista numerada de ações em ordem de execução. Se houver credencial exposta, a
 primeira ação é sempre **revogar**, nunca "remover do código" — o segredo já vazou no
 momento em que foi commitado.
+
+### Issues acionáveis (saída opcional — é o que fecha o ciclo)
+
+Quando o usuário quiser transformar o relatório em trabalho, gere, para **cada achado
+confirmado**, uma issue pronta para colar no rastreador. É o passo que falta entre "achei" e
+"cada correção vira verificação permanente": uma issue vira um PR vira um teste no CI.
+
+Formato de cada issue, em bloco delimitado (`--- ISSUE n ---` … `--- FIM ISSUE n ---`):
+
+- **Título:** `[Segurança] <descrição curta da falha>`
+- **Labels:** `security`, mais a severidade (`crítica`/`alta`/`média`/`baixa`)
+- **Problema e por que é explorável** — o caminho concreto de exploração
+- **Evidência:** `arquivo:linha` com o trecho real
+- **Impacto** — a consequência específica
+- **Correção sugerida** — antes/depois com o código do projeto
+- **Critérios de aceite** — checklist verificável (`[ ] a rota valida posse`, `[ ] teste que
+  prova que o usuário B não lê o dado de A`)
+
+**Agrupe achados triviais do mesmo tema numa issue só** (vários defaults de segredo, várias rotas
+com o mesmo padrão de IDOR) — uma issue por *classe*, não por linha, para não virar spam. Um
+achado Crítico ganha issue própria, sempre. E a issue nasce do achado **já refutado** na Fase 2:
+nada de issue para candidato que não sobreviveu.
 
 ### Linha de base
 

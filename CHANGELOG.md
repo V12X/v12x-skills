@@ -91,6 +91,25 @@ próprio app já usa e aponta onde ele se contradiz.
   não são conformidade de valor, não são determinísticos, entram no mapa de cobertura como não
   cobertos. Silêncio aqui é o furo que o modelo preenche com achismo (Tese 2).
 
+## [v12x-scan 1.3.0] — 2026-08-27
+
+### Adicionado
+Quatro melhorias aproveitadas da comparação com um prompt de auditoria de terceiro (o que o
+prompt tinha de bom e a v12x-scan não; o resto ou já era mais forte ou seria downgrade).
+- **Verificado e sólido**: a Fase 4 passa a listar, com evidência, o que foi checado e está
+  correto ("router X valida posse em todos os handlers") — a contraparte positiva do mapa de
+  cobertura, que prova que a categoria foi varrida, não pulada.
+- **Issues acionáveis** (saída opcional da Fase 4): cada achado confirmado vira uma issue pronta
+  para colar (título, labels, evidência, impacto, correção, critérios de aceite em checklist),
+  agrupando triviais do mesmo tema para não virar spam. É o passo que faltava entre "achei" e
+  "cada correção vira verificação permanente".
+- **Default público que vira segredo real** (`fundamentos.md`): `${VAR:-default}` e
+  `getenv(x, "changeme")` funcionam sem a var setada, então em produção o default de dev É o
+  segredo — mais a ausência de validação de startup que rejeite o default.
+- **Autorização não se amostra — varre-se**: regra dura na Fase 1. Basta um handler sem checagem
+  de posse para vazar; percorrer todos, cruzar cada gate de papel do front com o endpoint. Lista
+  grande demais para varrer inteira entra no mapa de cobertura como amostrada, nunca coberta.
+
 ## [v12x-agent-audit 1.0.0] — 2026-08-19
 
 Primeira versão. Auditoria de **confiança** de agentes, servidores MCP e skills — antes de

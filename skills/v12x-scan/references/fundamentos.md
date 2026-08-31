@@ -29,6 +29,20 @@ no navegador, no app ou no corpo da requisição, quem ataca controla.
 
 - **`.gitignore` antes do primeiro commit** cobrindo `.env`, `.env.local`, `.env.*.local`.
 - **`.env.example` só com placeholder**, nunca valor real.
+- **Default público que vira segredo real.** Um `${JWT_SECRET:-dev-secret}` ou
+  `SECRET_KEY = os.getenv("KEY", "changeme")` **funciona sem a variável setada** — e em produção,
+  se ninguém sobrescreveu, o "default de desenvolvimento" **é o segredo de produção**, e ele está
+  no código, público. Procurar em docker-compose, charts (Helm), CI, `settings.py`, `config.*`:
+  ```bash
+  # shell/compose: ${VAR:-default}
+  grep -rnE '\$\{[A-Z_]+:-[^}]+\}' . | grep -viE 'test|example' | grep -v node_modules
+  # código: getenv/env com fallback embutido
+  grep -rnE 'getenv\([^,)]+,[^)]+\)|process\.env\.[A-Z_]+\s*\|\|' . | grep -viE 'test|example' | grep -v node_modules
+  ```
+- **Falta de validação de startup é o que torna o default perigoso.** O app deveria **recusar
+  subir** se um segredo estiver no valor de default (ou vazio) em produção. A ausência desse
+  check — o app sobe feliz com `dev-secret` — é achado por si (Alta): nada avisa que a produção
+  está rodando com a credencial do exemplo.
 
 ## 2. Controle de acesso no banco
 
