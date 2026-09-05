@@ -3,7 +3,7 @@ name: v12x-scan
 description: Auditoria de segurança em profundidade, com ferramentas determinísticas antes da análise por leitura, verificação adversarial de cada achado e relatório acionável. Use quando o usuário pedir "auditar segurança", "revisar segurança", "varredura de segurança", "tem vazamento?", "posso publicar isso?", "está seguro para open source?", "antes de publicar", "checar segredos", "auditar antes de entregar ao cliente", "hacker acessa pelo frontend", "checar IDOR/SSRF/XSS", "auditar meu agente/MCP", ou antes de tornar um repositório público, publicar app na loja, entregar código a terceiro, ou ligar multi-tenancy. Autossuficiente: cobre os fundamentos (segredos, RLS, auth, rate limit, pagamento, LLM, deploy, injeção) e vai além com aplicação web (IDOR, mass assignment, SSRF, XSS, CORS/CSRF, upload), backends fora de TS/JS (Python, Go, Ruby, PHP, Java), apps agênticos/LLM (injeção de prompt, MCP, agência excessiva), iOS/Swift nativo, isolamento entre inquilinos, cadeia de suprimento/CI e limpeza de contexto interno.
 license: MIT
 metadata:
-  version: "1.3"
+  version: "1.4.0"
 ---
 
 Auditoria de segurança para código que vai a produção, à loja, ao cliente ou ao público.
@@ -188,6 +188,60 @@ Se `semgrep` existir, rode `semgrep --config=auto --severity=ERROR .` (há regra
 além de TS/JS). Se não existir, sugira `brew install semgrep`, registre como lacuna de
 cobertura, e **não bloqueie a auditoria** — siga para a fase 1.
 
+### Banco de dados: o catálogo vivo, não só as migrations
+
+Migration é **intenção**; o catálogo do banco em produção é o que **é**. Uma migration que não
+aplicou limpa, um grant dado à mão no painel, uma policy editada fora do git — nada disso está no
+repositório, e só aparece lendo o banco vivo. Se a auditoria tem acesso ao banco (cliente SQL, MCP
+do Supabase), leia o catálogo; se não tem, isso **entra no mapa de cobertura** como lacuna, nunca
+como "RLS conferida".
+
+```sql
+-- grants de TABELA e de COLUNA por papel: o que anon/authenticated alcançam de verdade
+SELECT table_name, grantee, privilege_type FROM information_schema.role_table_grants
+WHERE table_schema = 'public' AND grantee IN ('anon','authenticated') ORDER BY 1,2;
+SELECT table_name, column_name, grantee, privilege_type FROM information_schema.column_privileges
+WHERE table_schema = 'public' AND grantee IN ('anon','authenticated') ORDER BY 1,2;
+
+-- policies VIVAS (não as do arquivo)
+SELECT tablename, policyname, cmd, roles, qual, with_check FROM pg_policies WHERE schemaname = 'public';
+
+-- quem pode EXECUTAR cada função — em especial o que sobrou para anon
+SELECT p.proname, p.prosecdef AS definer, (aclexplode(p.proacl)).grantee::regrole AS grantee
+FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = 'public' AND p.proacl IS NOT NULL ORDER BY 1;
+```
+
+Função de leitura executável por `anon` que "devolve vazio" ainda é achado (Baixa, de coerência):
+a superfície de EXECUTE é a menor possível, não a que "por acaso não vaza". E rode os **advisors**
+do provedor (no Supabase, o Security Advisor): RLS desligada, função `definer` com `search_path`
+mutável, proteção contra senha vazada desligada — o provedor lista o que ele mesmo considera errado.
+
+### `security definer` que escreve sem amarrar o chamador
+
+Função `security definer` roda com o privilégio de quem a criou e **ignora a RLS**. Se ela faz
+`update … set` ou `on conflict … do update` amarrando só pelo `id` que veio no argumento, qualquer
+chamador reescreve a linha de qualquer um — o `where` de posse precisa vir do chamador validado
+(`auth.uid()`, ou o `p_user` que a função extrai do JWT), nunca do parâmetro. Caso real: uma
+função de mensagem do assistente fazia `on conflict (id) do update set body`, e um membro
+reescrevia a mensagem do colega, mantendo o autor original. **Quatro auditorias por leitura não
+viram; o grep abaixo vê:**
+
+```bash
+# toda função security definer que escreve — abrir cada uma: o where amarra a auth.uid()?
+grep -rliE 'security\s+definer' --include='*.sql' . | grep -v node_modules | while read f; do
+  grep -nEi 'on\s+conflict.*do\s+update|^\s*update\s+[a-z_."]+\s+set|delete\s+from' "$f" \
+    | grep -vE '(^|:)[0-9]+:\s*--' | sed "s|^|$f:|"
+done
+```
+
+A lista é por **arquivo** — função que não é `definer` mas mora no mesmo `.sql` aparece também, e
+se descarta em segundos (o `assets/definer.test.ts` é o que separa por função). Cada linha que sair
+é para abrir: o `where` (ou o `with check` do caminho) amarra a linha ao chamador? Se amarra só pelo argumento, é achado **Alta**. O `assets/definer.test.ts` transforma a
+regra em teste de CI que lê as migrations e falha quando um `do update` em `definer` chega sem
+`where` — a exceção fica escrita no próprio teste, com motivo. Detalhe da regra em
+`references/multi-tenancy.md`.
+
 ### CI e arquivos de infraestrutura
 
 Se existir `.github/workflows/`, Dockerfile ou docker-compose, carregue
@@ -366,6 +420,19 @@ Formato de cada entrada da linha de base:
 - `arquivo.ts:42` — nome do achado — aceito em 2026-08-13 por: <motivo> — revisar em: <data>
 ```
 
+**Refutações também atravessam auditorias.** O que a Fase 2 refutou hoje será candidato de novo
+amanhã — a mesma chave publicável em arquivo ignorado, o mesmo `${{ }}` que é SHA, a mesma injeção
+indireta sem canal de saída. Re-litigar o mesmo não-achado a cada rodada é desperdício: num projeto
+real, a chave publicável foi refutada pela **quarta auditoria seguida**. Registre a refutação na
+linha de base, com **o caminho que a provou** e **o que a reabriria**, e a próxima auditoria pula
+direto, mencionando só a contagem — como faz com os aceitos. Refutação e risco aceito ficam em
+seções separadas, de propósito: o aceito é um achado real que se decidiu tolerar; o refutado nunca
+foi achado.
+
+```markdown
+- `arquivo:linha` — candidato — refutado em AAAA-MM-DD por: <a prova> — reabrir se: <o que mudaria a conclusão>
+```
+
 ### O ciclo que fecha o furo de verdade
 
 Uma auditoria pontual não deixa nada "à prova de furos" — o que aproxima disso é o ciclo:
@@ -375,7 +442,9 @@ Uma auditoria pontual não deixa nada "à prova de furos" — o que aproxima dis
    auditoria **diffa contra a anterior**: o que voltou é regressão e sobe um nível de severidade.
 2. **Cada achado corrigido vira verificação permanente.** Se o achado foi "token em log",
    nasce um grep no CI que falha se o padrão voltar; se foi "tabela sem RLS", nasce o teste
-   de isolamento. Achado que só vive no relatório volta. O template `assets/security-ci.yml`
+   de isolamento; se foi função `security definer` escrevendo sem `where`, ou coluna nova que
+   herdou o grant da tabela, entram `assets/definer.test.ts` e `assets/grants-de-coluna.test.ts`,
+   que leem as migrations no CI. Achado que só vive no relatório volta. O template `assets/security-ci.yml`
    amarra gitleaks, osv-scanner e semgrep em cada push e PR — é o mínimo que faz a Fase 0
    rodar sozinha.
 3. **Reauditar após as correções**, no mínimo a fase 0 inteira — correção de segurança
@@ -404,15 +473,24 @@ a referência aplicável. Prevenir é mais barato que auditar.
 - `references/linguagens-backend.md` — os mesmos padrões (IDOR, mass assignment, SQL, SSRF)
   em Python/Django/DRF, Ruby/Rails, PHP/Laravel, Go e Java/Kotlin/Spring.
 - `references/llm-agentes.md` — injeção de prompt indireta, confiança em servidor MCP e
-  tool poisoning, agência excessiva, exfiltração pelo canal de saída, saída do modelo como código.
+  tool poisoning, agência excessiva, exfiltração pelo canal de saída, saída do modelo como código,
+  quota por inquilino na chave da plataforma, identidade do assistente forjável pelo cliente.
 - `references/ios-nativo.md` — Keychain contra UserDefaults, Secure Enclave, ATS, área de
   transferência, exclusão de backup, capturas de tela, deep links, manifesto de privacidade.
-- `references/multi-tenancy.md` — isolamento entre organizações, RLS por inquilino,
-  vazamento por armazenamento e por cache, testes de isolamento.
+- `references/multi-tenancy.md` — isolamento entre organizações, RLS por inquilino, função
+  `security definer` que escreve pelo argumento, coluna nova que herda o grant da tabela,
+  referência que o `service_role` segue sem re-escopo, vazamento por armazenamento e por cache,
+  teste de isolamento em cinco operações a partir do catálogo.
 - `references/pre-publicacao.md` — limpeza de contexto interno, histórico do git, licenças,
   o que auditar antes de abrir o código ou entregar a um cliente.
 - `references/cadeia-e-ci.md` — GitHub Actions (`pull_request_target`, injeção via
-  `${{ }}`, pin por SHA), Docker, lockfiles, scripts de instalação, EXIF em imagens.
+  `${{ }}`, pin por SHA, portão que distingue rede de achado), Docker, lockfiles, scripts de
+  instalação, EXIF em imagens.
 - `assets/security-ci.yml` — workflow mínimo que amarra gitleaks + osv-scanner + semgrep em
   cada push e PR, fechando o ciclo.
-- `assets/baseline.example.md` — modelo de `.security-baseline.md` para registrar risco aceito.
+- `assets/baseline.example.md` — modelo de `.security-baseline.md` para registrar risco aceito
+  **e refutação**, para a próxima auditoria não re-litigar o mesmo não-achado.
+- `assets/definer.test.ts` — teste de CI que lê as migrations: todo `update`/`do update` em função
+  `security definer` leva `where`; a exceção fica escrita no teste, com motivo.
+- `assets/grants-de-coluna.test.ts` — teste de CI: em tabela declarada "grant por coluna", coluna
+  nova sem `GRANT SELECT (coluna)` explícito e sem motivo de ser privada falha o build.

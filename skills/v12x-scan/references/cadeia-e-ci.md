@@ -72,6 +72,34 @@ E elevar só o job que precisa. Workflow sem bloco `permissions` é achado Médi
 artefato que inclui `.env`. O GitHub mascara o valor exato do segredo, mas não mascara
 transformações (base64, URL-encoded).
 
+### O portão distingue "falhou a rede" de "achou vulnerabilidade"
+
+`npm audit` devolve **1** tanto quando encontra vulnerabilidade quanto quando o registry responde
+503 — e um job que trata os dois igual fica vermelho por rede, não por segurança. Caso real: sete
+minutos tentando, 503, saída 1, job vermelho com os 34 testes verdes. Um portão que grita lobo por
+infraestrutura é o portão que a equipe aprende a ignorar — e portão ignorado reabre o furo que ele
+existia para fechar.
+
+Regra: no job de segurança, **falha de infraestrutura vira aviso**, **achado real derruba**. O
+mais simples é separar os dois no próprio passo:
+
+```yaml
+- name: npm audit
+  run: |
+    set +e
+    out=$(npm audit --audit-level=high 2>&1); code=$?
+    set -e
+    if [ $code -ne 0 ] && echo "$out" | grep -qE '503|ECONNRESET|ETIMEDOUT|ENOTFOUND|registry'; then
+      echo "::warning::npm audit não concluiu — registry indisponível. É lacuna declarada, não achado."
+      exit 0
+    fi
+    echo "$out"; exit $code
+```
+
+E a lacuna fica **declarada** no cabeçalho do workflow, para ninguém ler o verde como "auditado"
+quando foi "não deu para auditar". O mesmo vale para `osv-scanner` e qualquer passo que consulte
+um serviço de fora.
+
 ---
 
 ## Docker

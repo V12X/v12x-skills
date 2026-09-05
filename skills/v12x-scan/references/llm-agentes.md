@@ -128,12 +128,45 @@ grep -rnE '(eval|exec|os\.system|subprocess|child_process|new Function|db\.(exec
 - Limite de tamanho do corpo da requisição (contexto/anexo) — senão o usuário manda 50 MB.
 - Teto de gasto no painel do provedor: última linha de defesa, custo zero para ligar.
 - Endpoint que chama o modelo exige **autenticação**. Rota de IA aberta é conta drenada em horas.
+- **Quota por inquilino em endpoint que gasta na chave da plataforma.** Rate limit por minuto
+  não é teto: um membro comum que pode inserir documentos sem fim manda vinte megabytes ao modelo
+  trinta vezes por minuto, *dentro* do limite, na chave da empresa — e a fatura é sua. Ingestão,
+  transcrição, embedding e "ensinar o assistente" têm teto **mensal por organização**, por faixa
+  de plano, imposto no banco (uma função que conta antes de inserir), não no cliente.
+- **Idempotência contra o recompute.** O que já está `ready` não é reprocessado: reenviar o mesmo
+  documento cem vezes custa zero chamadas ao modelo. Sem isso, a quota é drenada repetindo o
+  mesmo item.
 
 ```bash
 # chamadas de modelo sem teto aparente
 grep -rnE '(openai|anthropic|generativelanguage|gemini|bedrock|ollama)' \
   --include='*.ts' --include='*.py' --include='*.go' . | grep -v node_modules | grep -viE 'max_?tokens|maxTokens'
 ```
+
+---
+
+## 7. Identidade do assistente e atributo privilegiado vindo do cliente
+
+Quando o app e a Edge Function (ou o backend) falam com o banco usando **o mesmo JWT do
+usuário**, o cliente consegue tudo que a função consegue — inclusive o que só ela deveria fazer.
+Caso real: qualquer membro publicava uma mensagem `kind = assistant`, com a cara do robô e
+**botões de ação inventados**, porque o caminho de escrita era o mesmo do app. O colega clica no
+botão do "assistente" e executa o que o membro mal-intencionado escreveu.
+
+Regra: **identidade do autor, papel, `kind` (assistant/system), flags de privilégio e ações
+anexadas nascem no servidor, a partir do token validado — nunca aceitos do corpo da requisição.**
+A escrita "como assistente" é exclusiva do `service_role` (ou de uma função `security definer` que
+só o serviço executa), e a função extrai o `user_id` do JWT que validou, não de um argumento.
+
+```bash
+# quem consegue escrever 'assistant'/'system' como kind/role/author?
+grep -rnE "kind\s*[:=]\s*['\"](assistant|system|bot)|role\s*[:=]\s*['\"](assistant|system|admin)" \
+  --include='*.ts' --include='*.tsx' --include='*.sql' --include='*.swift' . | grep -v node_modules
+```
+
+Para cada ocorrência no cliente, ou numa rota que o cliente alcança com o próprio JWT: o servidor
+ignora esse campo e o deriva sozinho? Se o campo do cliente vence, é achado **Alta** — é o mass
+assignment de `web-app.md`, aplicado à identidade do agente.
 
 ---
 

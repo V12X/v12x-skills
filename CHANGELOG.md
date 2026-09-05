@@ -6,6 +6,48 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o
 versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Cada entrada nomeia a **skill**
 afetada e a sua versão; o repositório reúne mais de uma skill sob o [Método v12x](METHOD.md).
 
+## [v12x-scan 1.4.0] — 2026-09-05
+
+Calibrada numa auditoria real (app iOS + web, plataforma Supabase, painel do operador) em que o
+achado mais grave — uma policy de INSERT que deixava qualquer conta se inserir numa organização
+**como admin** — escapou de **quatro auditorias por leitura** e só apareceu num teste executável
+que entrou como a outra empresa. Cada lição virou regra, e o máximo delas virou grep na Fase 0:
+o que antes só o teste pegava, agora a leitura determinística pega primeiro.
+
+### Adicionado
+- **Fase 0 · catálogo vivo**: ler grants de tabela e de coluna, `pg_policies` e a ACL de cada
+  função (`aclexplode`) do banco em produção, mais os advisors do provedor. Migration é intenção;
+  o catálogo é o que é. Sem acesso ao banco, entra no mapa de cobertura como lacuna.
+- **Fase 0 · `security definer` que escreve sem `where`**: grep determinístico que lista toda
+  função `definer` com `update`/`on conflict … do update`/`delete` para abrir uma a uma. Uma
+  alta real (`on conflict (id) do update set body` — membro reescrevia mensagem do colega) teria
+  sido pega por leitura.
+- `assets/definer.test.ts`: fixa a regra no CI lendo as migrations; exceções escritas com motivo;
+  exceção órfã falha.
+- `assets/grants-de-coluna.test.ts`: em tabela declarada "grant por coluna", coluna nova sem
+  `GRANT SELECT (coluna)` explícito e sem motivo de ser privada falha o build — a lição que se
+  repetiu em três tabelas (0033, 0045, 0072).
+- `multi-tenancy.md`: três seções novas — `security definer` que amarra pelo argumento; coluna
+  nova que herda o grant da tabela; **referência que o `service_role` segue sem re-escopo ao
+  inquilino** (`file_id` de outra empresa transcrito e indexado na sua).
+- `llm-agentes.md` item 7: identidade do assistente forjável quando app e Edge Function usam o
+  mesmo JWT (`kind = assistant` com botões de ação inventados) — atributo privilegiado nasce no
+  servidor a partir do token validado, nunca do cliente.
+- `cadeia-e-ci.md`: o portão de segurança distingue "falhou a rede" (aviso) de "achou
+  vulnerabilidade" (derruba). `npm audit` sai 1 nos dois casos; job vermelho por 503 é o portão
+  que a equipe aprende a ignorar.
+- **Linha de base com refutações**: o que a Fase 2 refutou atravessa auditorias, com a prova e o
+  que reabriria — a próxima rodada pula direto em vez de re-litigar (a chave publicável em arquivo
+  ignorado foi refutada pela quarta auditoria seguida).
+
+### Alterado
+- `multi-tenancy.md` · teste de isolamento: de três operações para **cinco** (ler, atualizar,
+  apagar, **inserir**, **chamar função**), com a lista de tabelas e funções vinda **do catálogo**
+  (a próxima entra sozinha), só código de recusa contando como recusa, e rodando no CI contra um
+  banco vazio que sobe das migrations.
+- `llm-agentes.md` item 6: quota **mensal por inquilino** em endpoint que gasta na chave da
+  plataforma (rate limit por minuto não é teto) e idempotência contra o recompute.
+
 ## [v12x-design-audit 1.0.0] — 2026-08-19
 
 Primeira versão. Auditoria de conformidade ao design system, com aplicação das trocas — para o

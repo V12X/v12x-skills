@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Skills de auditoria de conformidade da V12X para o Claude Code, seguindo o Método v12x.",
-    "version": "0.5.0"
+    "version": "0.6.0"
   },
   "plugins": [
     {
       "name": "v12x-scan",
       "source": "./skills/v12x-scan",
       "description": "Auditoria de segurança em profundidade: ferramentas determinísticas antes da leitura, verificação adversarial de cada achado e relatório com veredito de publicação. Cobre aplicação web (IDOR, SSRF, XSS), backends fora de TS/JS (Python, Go, Ruby, PHP, Java), apps agênticos/LLM (injeção de prompt, MCP), iOS nativo, multi-tenancy, cadeia/CI e pré-publicação.",
-      "version": "1.3.0"
+      "version": "1.4.0"
     },
     {
       "name": "v12x-agent-audit",

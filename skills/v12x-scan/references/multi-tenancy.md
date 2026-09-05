@@ -66,6 +66,81 @@ Todo uso de `service_role` é um ponto onde o isolamento **não existe**. Audita
 ocorrência: está em código que roda só no servidor? A consulta filtra por inquilino
 manualmente? Nunca pode estar em código de cliente nem em variável com prefixo público.
 
+### `security definer` escreve com o privilégio do dono — e amarra pelo argumento?
+
+Função `security definer` ignora a RLS. Se ela faz `update … set` ou `on conflict … do update`
+amarrando só pelo `id` que veio no argumento, **qualquer chamador reescreve a linha de qualquer
+um**: a policy que protegeria a tabela nem é consultada. O `where` de posse tem que vir do chamador
+validado (`auth.uid()`, ou o `p_user` que a função extrai do JWT), nunca do parâmetro.
+
+Caso real: função de mensagem do assistente com `on conflict (id) do update set body` — um membro
+reescrevia a mensagem do colega, com o autor original e sem `edited_at`. **Escapou de quatro
+auditorias por leitura.** O grep que lista as candidatas está na Fase 0 da SKILL; abrir cada uma
+e perguntar: o `where` amarra o chamador, ou só o argumento?
+
+```sql
+-- ERRADO — o conflito é pelo id que veio de fora; a linha pode ser de qualquer um
+insert into mensagens (id, canal_id, body) values (p_id, p_canal, p_body)
+on conflict (id) do update set body = excluded.body;
+
+-- CERTO — só reescreve o que já era do chamador (ou do assistente, no mesmo canal)
+on conflict (id) do update set body = excluded.body
+where mensagens.author_id = p_user and mensagens.canal_id = p_canal;
+```
+
+O `assets/definer.test.ts` fixa a regra no CI: todo `do update` em `definer` leva `where`. A
+exceção fica **escrita no teste, com motivo** — um upsert de token de aparelho pela chave
+`(user_id, token)`, por exemplo, só pode conflitar com a linha do próprio usuário.
+
+### Coluna nova herda o grant da tabela — a lição que se repete
+
+`GRANT SELECT ON workspaces TO authenticated` dá SELECT em **todas as colunas, inclusive as que
+ainda não existem**. A coluna sensível criada numa migration depois (`operator_note`,
+`internal_flag`, `cost_cents`) nasce **dentro** desse grant e é legível por todo membro da
+organização, sem que ninguém tenha decidido isso. Num projeto real essa foi a lição da migration
+0033, da 0045 **e da 0072 — a terceira tabela**. Erro que se repete três vezes não é descuido: é
+ausência de regra.
+
+Regra: tabela que mistura coluna de todos com coluna de poucos tem grant **por coluna**, não por
+tabela — e coluna nova precisa de grant explícito ou motivo declarado de ser privada.
+
+```sql
+-- tabelas com grant de TABELA para authenticated: cada coluna delas é pública para o membro
+SELECT DISTINCT table_name FROM information_schema.role_table_grants
+WHERE table_schema = 'public' AND grantee = 'authenticated' AND privilege_type = 'SELECT';
+-- para cada uma, liste as colunas e pergunte, uma a uma: "todo membro pode ler isto?"
+```
+
+O `assets/grants-de-coluna.test.ts` fixa isso no CI: para cada tabela declarada "grant por
+coluna", coluna nova em migration sem `GRANT SELECT (coluna)` explícito e sem comentário de motivo
+falha o build.
+
+### A referência que o `service_role` segue precisa ser re-amarrada ao inquilino
+
+O caso mais sutil: a linha tem `workspace_id` certo, a RLS está ligada, e mesmo assim vaza —
+porque um **id que a linha aponta** (`file_id`, `document_id`, `account_id`) não está amarrado ao
+mesmo inquilino, e um caminho com `service_role` **desreferencia** esse id sem conferir. Caso
+real: `documentos.file_id` aceitava o id de um arquivo de outra empresa, e a função de ingestão
+lia o arquivo com a chave de serviço — o contrato da empresa B foi transcrito, indexado e
+respondido pelo assistente da empresa A.
+
+Regra: **toda coluna de referência que um caminho privilegiado segue é amarrada ao inquilino da
+própria linha** — por trigger ou constraint que confere que o alvo pertence ao mesmo
+`workspace_id` — e o caminho privilegiado lê o alvo com o **token da pessoa**, não com a chave de
+serviço, sempre que puder. Assim a RLS do alvo trabalha a favor.
+
+```sql
+-- colunas de referência em tabelas com inquilino: cada uma amarra ao mesmo inquilino?
+SELECT c.table_name, c.column_name FROM information_schema.columns c
+WHERE c.table_schema = 'public' AND c.column_name LIKE '%\_id'
+  AND c.column_name NOT IN ('workspace_id','org_id','tenant_id','user_id')
+  AND EXISTS (SELECT 1 FROM information_schema.columns w WHERE w.table_name = c.table_name
+              AND w.column_name IN ('workspace_id','org_id','tenant_id'));
+```
+
+Cada linha que sair: existe trigger/constraint que prove que o alvo é do mesmo inquilino? Se não,
+e um caminho `service_role` segue esse id, é achado **Alta**.
+
 ---
 
 ## Armazenamento de arquivo
@@ -126,18 +201,39 @@ difícil de varrer.
 ## Teste que prova o isolamento
 
 Auditoria por leitura não prova isolamento. Exija teste automatizado, e a ausência dele é
-achado por si:
+achado por si. E a receita cobre **cinco** operações, não três: a crítica que quatro auditorias
+por leitura não viram — uma policy de INSERT que deixava qualquer conta se inserir numa
+organização **como admin** — só apareceu quando o teste tentou **inserir** e **chamar função**
+como a outra empresa.
 
 ```
-1. criar organização A e organização B, com um usuário em cada
-2. criar registro em A
-3. autenticar como usuário de B
-4. tentar ler, atualizar e apagar o registro de A, por API e por consulta direta
-5. as quatro operações precisam falhar
+1. criar organização A e organização B, com uma pessoa em cada
+2. como A: criar uma linha em CADA tabela com coluna de inquilino, mais um objeto no storage;
+   provar que A lê tudo
+3. virar a pessoa de B — a troca de identidade é a do PostgREST por dentro:
+   `set local role authenticated` + `request.jwt.claims` com o sub de B
+4. como B, contra os ids de A:
+   - LER cada tabela                                → zero linhas
+   - ATUALIZAR e APAGAR por id                      → zero linhas afetadas
+   - INSERIR em cada tabela com o inquilino de A    → recusado
+   - CHAMAR cada função exposta (rpc) com ids de A  → recusado ou "não encontrado"
+   - ler o objeto de A no storage                   → recusado
+5. tudo numa transação que termina em rollback
 ```
 
-Rodar esse teste para **cada tabela** com dado de inquilino, e para o storage. É o único
-jeito de transformar "acho que isola" em "prova que isola".
+Três detalhes que decidem se o teste prova ou só parece provar:
+
+- **A lista vem do catálogo, não da mão.** Tabelas de `pg_tables` filtradas pela coluna de
+  inquilino, funções de `pg_proc` no schema público — assim **a próxima tabela entra sozinha**.
+  Lista escrita à mão é lista que envelhece, e a tabela nova é justamente a que ninguém pensou.
+- **Só o código de recusa conta como recusa.** `42501` (permissão/RLS), e `22023` ou "não
+  encontrado" para o que a RLS esconde. Erro de digitação, coluna que não existe, função com
+  assinatura errada — tudo isso **derruba o teste**, não passa como "recusou". Senão o teste fica
+  verde por acidente.
+- **Roda no CI contra um banco vazio** que sobe das migrations (a stack local do Supabase no
+  runner). Se as migrations não sobem limpas num banco vazio, isso já é achado — é assim que
+  aparecem o prefixo de migration duplicado e a migration que depende de uma conta que só existe
+  em produção.
 
 ---
 
@@ -155,4 +251,9 @@ grep -rnE 'NEXT_PUBLIC_[A-Z_]*(KEY|SECRET|TOKEN|PASSWORD)' . | grep -v node_modu
 
 # consultas sem filtro de inquilino (revisar manualmente cada uma)
 grep -rn "\.from('" --include='*.ts' . | grep -v node_modules | grep -viE "org_id|tenant_id|client_id"
+
+# funções security definer que escrevem — abrir cada uma: o where amarra a auth.uid()?
+grep -rliE 'security\s+definer' --include='*.sql' . | grep -v node_modules \
+  | xargs grep -nEi 'on\s+conflict.*do\s+update|^\s*update\s+[a-z_."]+\s+set|delete\s+from' 2>/dev/null \
+  | grep -vE '(^|:)[0-9]+:\s*--'
 ```
