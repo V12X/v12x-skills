@@ -6,6 +6,43 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o
 versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Cada entrada nomeia a **skill**
 afetada e a sua versão; o repositório reúne mais de uma skill sob o [Método v12x](METHOD.md).
 
+## [v12x-scan 1.5.0] — 2026-10-20
+
+Disciplina de verificação, incorporada por comparação com a `cloudflare/security-audit-skill` —
+o que ela tem de melhor (contabilidade de estados e portão de admissão) sem o que não cabe aqui
+(o harness multi-agente, a ausência de scanners). A v12x-scan continua barata, determinística
+primeiro e específica da stack; agora com três estados por candidato e um portão mais duro.
+
+### Adicionado
+- **Fase 2 · teste de admissão em quatro partes**: todo candidato nomeia quem ataca (principal de
+  menor confiança), que fronteira cruza, que controle deveria barrar, e o que consegue observável.
+  Boa prática ausente não é falha; impacto só em si mesmo não é fronteira; **a severidade não
+  pode exceder o impacto observado**.
+- **Fase 2 · três estados por candidato**: confirmado, refutado e **pendente de validação** — a
+  hipótese precisa cuja conclusão depende de um fato fora do repositório (painel do provedor,
+  CDN, réplica, retenção). Pendente nomeia o fato e a checagem não destrutiva, **nunca recebe
+  severidade**, nunca é estacionamento para especulação, e **conta no veredito** ("não publicar
+  até o dono validar X").
+- **Fase 2 · verificador independente para Crítica e Alta**: subagente que recebe só o candidato
+  e o código, sem o contexto da caça, com a ordem de refutar. Autorrefutação tem viés de
+  confirmação; para o que importa, quem verifica não é quem achou.
+- **Fase 2 · anti-padrões** explícitos (desvio de checklist como vulnerabilidade, adivinhar o
+  deploy, severidade em pendente, relatório antes da verificação).
+- **Fase 4 · seção "Pendente de validação"** no relatório, com "se confirmado: <nível>" — declara
+  o que está em jogo sem fingir que foi demonstrado. Pendente vira item de verificação para o
+  dono, não issue de correção.
+- `multi-tenancy.md` · **"As cópias que a RLS não vê"**: cópia derivada com ACL própria (índice,
+  **embeddings do assistente**, cache, preview — documento apagado continua no RAG), autorização
+  que sobrevive à revogação (sessão, realtime, job, URL assinada), e exportação/backup/restauração
+  que expandem escopo. Com query para achar as tabelas derivadas e fixtures para o teste de
+  isolamento.
+
+### Alterado
+- **Linha de base · reabertura por diff**: refutação e risco aceito registram o commit da prova;
+  `git diff <commit>..HEAD -- <arquivo>` na auditoria seguinte reabre o que mudou, independente da
+  prosa do "reabrir se". Seção nova de pendentes no `baseline.example.md`.
+- Fase 3: só o confirmado é classificado.
+
 ## [v12x-scan 1.4.0] — 2026-09-05
 
 Calibrada numa auditoria real (app iOS + web, plataforma Supabase, painel do operador) em que o

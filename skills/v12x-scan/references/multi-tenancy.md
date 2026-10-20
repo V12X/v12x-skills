@@ -190,6 +190,68 @@ todos os clientes de uma vez.
 
 ---
 
+## As cópias que a RLS não vê
+
+A linha na tabela está isolada. **As cópias dela não necessariamente.** Todo dado de inquilino
+gera derivados com ciclo de vida próprio — e cada um é um leitor alternativo com ACL que ninguém
+escreveu: índice de busca, **embeddings do assistente**, cache, analytics, log, preview,
+miniatura, exportação, backup, réplica. Um campo `workspace_id` na linha não é isolamento; a
+pergunta é, para **cada** cópia, qual consulta, chave ou policy filtra por inquilino na leitura.
+
+### Cópia derivada com ACL própria
+
+Documento apagado ou com acesso revogado **continua no índice**. O caso mais direto num app com
+assistente: o documento sai de `documentos`, mas o chunk com o texto continua em `embeddings` e o
+RAG o recupera para quem perguntar. O mesmo para busca full-text, cache de resposta, preview
+renderizado, miniatura no bucket.
+
+Regra: toda cópia derivada **filtra por inquilino na recuperação** (não só na gravação) e
+**invalida junto** com a origem — por trigger, por cascata, ou por job que prova ter rodado.
+
+```sql
+-- tabelas que parecem derivadas: têm vetor/índice/cache mas a RLS delas filtra por inquilino?
+SELECT c.table_name FROM information_schema.columns c
+WHERE c.table_schema = 'public' AND (c.data_type = 'USER-DEFINED' AND c.udt_name = 'vector'
+   OR c.table_name ~ '(embedding|chunk|index|cache|search|preview|thumb|export)')
+GROUP BY 1;
+-- para cada uma: a policy de SELECT deriva de auth.uid()? e o DELETE da origem cascateia até aqui?
+```
+
+Fixtures para o teste de isolamento: criar documento em A, indexar, **apagar em A**, e provar
+que a busca/RAG de A **e** de B não o devolvem mais.
+
+### Autorização que sobrevive à revogação
+
+Remover o membro, trocar o papel, revogar o convite, retirar o consentimento: o que ainda
+autoriza depois disso? Sessão viva, token de atualização, cache de permissão, assinatura de
+realtime já aberta, job enfileirado com o contexto antigo, link assinado emitido antes.
+
+Regra: toda decisão de acesso é **tomada na hora da operação**, contra o estado atual — não
+herdada de quando a sessão nasceu. E a revogação **propaga**: fecha o canal de realtime, invalida
+o cache, cancela ou re-autoriza o job.
+
+Fixture para o teste de isolamento: B entra em A como membro, abre a assinatura e guarda uma URL
+assinada; **A remove B**; a assinatura para de entregar, a URL assinada expira ou recusa, e a
+próxima leitura de B recebe zero linhas.
+
+### Exportação, backup e restauração expandem escopo
+
+- **Exportar** seleciona por inquilino e depois serializa tudo — inclusive coluna que o membro
+  não lê, linha em soft-delete, histórico, segredo cifrado. Autorizar **cada item** depois da
+  seleção, e autorizar **o download do artefato** (link de exportação é dado de inquilino).
+- **Importar/restaurar** aceita um arquivo e grava — passando por cima de dono, ACL, unicidade,
+  validação, e recriando registro em inquilino onde quem importa não escreve. Arquivo importado é
+  entrada não confiável: **autorizar a operação resultante**, não o arquivo.
+- **Restauração ressuscita o proibido**: backup, undo, undelete trazem de volta permissão,
+  membro, credencial que a política atual já revogou. Re-autorizar o estado restaurado e
+  reaplicar o que mudou depois do snapshot.
+
+Onde o repositório não mostra a política de retenção, o acesso ao backup ou o comportamento da
+réplica, isso é **pendente de validação** (SKILL, Fase 2) com a checagem nomeada — nunca
+"provavelmente isola".
+
+---
+
 ## Enumeração por identificador sequencial
 
 Id inteiro sequencial permite descobrir volume e adivinhar recurso. Preferir UUID. **Não é

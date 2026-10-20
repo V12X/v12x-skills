@@ -3,7 +3,7 @@ name: v12x-scan
 description: Auditoria de segurança em profundidade, com ferramentas determinísticas antes da análise por leitura, verificação adversarial de cada achado e relatório acionável. Use quando o usuário pedir "auditar segurança", "revisar segurança", "varredura de segurança", "tem vazamento?", "posso publicar isso?", "está seguro para open source?", "antes de publicar", "checar segredos", "auditar antes de entregar ao cliente", "hacker acessa pelo frontend", "checar IDOR/SSRF/XSS", "auditar meu agente/MCP", ou antes de tornar um repositório público, publicar app na loja, entregar código a terceiro, ou ligar multi-tenancy. Autossuficiente: cobre os fundamentos (segredos, RLS, auth, rate limit, pagamento, LLM, deploy, injeção) e vai além com aplicação web (IDOR, mass assignment, SSRF, XSS, CORS/CSRF, upload), backends fora de TS/JS (Python, Go, Ruby, PHP, Java), apps agênticos/LLM (injeção de prompt, MCP, agência excessiva), iOS/Swift nativo, isolamento entre inquilinos, cadeia de suprimento/CI e limpeza de contexto interno.
 license: MIT
 metadata:
-  version: "1.4.0"
+  version: "1.5.0"
 ---
 
 Auditoria de segurança para código que vai a produção, à loja, ao cliente ou ao público.
@@ -303,18 +303,67 @@ mapa de cobertura** como amostrado, nunca como coberto.
 
 ## Fase 2 — Verificação adversarial
 
-**Nenhum achado entra no relatório sem passar por esta porta.** Para cada candidato,
-responda as três perguntas. Se qualquer uma falhar, descarte ou rebaixe.
+**Nenhum achado entra no relatório sem passar por esta porta.** Primeiro a âncora: **arquivo e
+linha**. Sem âncora não é achado, é impressão. Depois, o teste de admissão em quatro partes. Um
+candidato só é achado se nomear **os quatro**; se qualquer um faltar, descarte ou rebaixe.
 
-1. **Onde exatamente?** Arquivo e linha. Sem âncora, não é achado — é impressão.
-2. **Qual o caminho desde entrada não confiável?** Descreva a rota concreta: requisição
-   externa → parâmetro → função vulnerável. Se o código só é alcançável por script local de
-   build, por teste, ou por caminho autenticado de administrador, **rebaixe**.
-3. **O que um atacante consegue?** Consequência concreta e específica: "lê os documentos de
-   qualquer usuário trocando o id na URL", não "pode causar exposição de dados".
+1. **Quem ataca?** O principal de **menor confiança** que alcança o caminho: anônimo, membro
+   comum, inquilino vizinho. Se só o próprio dono do dado chega lá, não há fronteira cruzada —
+   impacto só em si mesmo não é vulnerabilidade.
+2. **Que fronteira ele cruza?** A rota concreta: requisição externa → parâmetro → função
+   vulnerável. Se o código só é alcançável por script local de build, por teste, ou por caminho
+   autenticado de administrador, **rebaixe**.
+3. **Que controle deveria barrar e não barra?** A policy, o middleware, a checagem de posse que
+   existe para isso — e por que ela não cobre este caminho. **Boa prática ausente não é falha**:
+   "não tem rate limit" sem um caminho que o explore é endurecimento, não achado.
+4. **O que ele consegue, observável?** Consequência concreta e específica: "lê os documentos de
+   qualquer usuário trocando o id na URL", não "pode causar exposição de dados". E nunca mais
+   forte do que o que foi de fato demonstrado: **a severidade não pode exceder o impacto
+   observado** — a leitura que prova "lê o título" não autoriza reportar "lê o documento".
 
 Depois, tente **refutar** o achado explicitamente. Existe validação em camada anterior?
 Middleware que já barra? RLS que já cobre? Se existir, o achado morre — e isso é bom.
+
+### Os três estados de um candidato
+
+Cada candidato que passou pela âncora termina em **exatamente um** destes:
+
+- **Confirmado** — os quatro nomeados, com caminho completo no código e resultado observado (ou
+  demonstrado por leitura sem lacuna). Só ele recebe severidade (Fase 3) e vira issue (Fase 4).
+- **Refutado** — uma camada visível barra, ou falta impacto real, ou o pré-requisito é
+  impossível. Fica registrado com a prova (Fase 4, linha de base), nunca descrito como achado.
+- **Pendente de validação** — o caminho no código fecha, mas a conclusão depende de **um fato
+  que o repositório não contém**: o interruptor no painel do provedor, o comportamento do CDN
+  diante de resposta autenticada, o lag da réplica, a política de retenção do backup, o header
+  que o proxy da frente adiciona. Este estado tem regras duras:
+  - nomeia **o fato exato** que falta e **a checagem não destrutiva** que o dono faz para
+    resolvê-lo ("Authentication → Settings → Password security: ligado?");
+  - **nunca recebe severidade** — severidade é consequência demonstrada, e aqui nada foi;
+  - **nunca é estacionamento para ideia especulativa**: "talvez o CDN cacheie" sem um caminho
+    concreto no código é descarte, não pendência. Pendente é hipótese *precisa* com uma
+    *única* incógnita fora do repositório;
+  - entra no relatório em seção própria e **conta no veredito**: se o fato, confirmado, faria
+    o achado Crítico, o veredito é "não publicar até o dono validar X" — a severidade continua
+    sem atribuir, mas a decisão não espera.
+
+### Crítica e Alta passam por quem não as achou
+
+Verificar o próprio candidato é refutar com viés de confirmação: quem acabou de montar o caminho
+tende a enxergá-lo fechado. Para o que importa — **todo candidato a Crítica ou Alta** — a
+refutação é feita por um **verificador independente**: um subagente que recebe **só** o candidato
+(âncora, caminho, resultado alegado) e acesso ao código, **sem** o contexto da caça nem a sua
+conclusão, com uma ordem: *"Você não escreveu este candidato. Tente refutá-lo pelo código."* Ele
+devolve um dos três estados com a prova. Se ele refutar, o candidato morre ou vira pendente — não
+se "negocia". Para Média e Baixa a autorrefutação basta; o custo do subagente não se justifica.
+
+### Anti-padrões que esta fase existe para barrar
+
+- Reportar desvio de checklist ou boa prática ausente como vulnerabilidade.
+- Adivinhar comportamento de deploy ("provavelmente não tem WAF") em vez de marcar pendente.
+- Tratar impacto só sobre o próprio usuário como fronteira cruzada.
+- Reportar efeito mais forte que o observado.
+- Dar severidade a pendente de validação.
+- Escrever o relatório antes de a verificação terminar.
 
 **Regra de calibragem:** é melhor entregar cinco achados sólidos que trinta candidatos, dos
 quais vinte são ruído. Falso positivo destrói a confiança no relatório inteiro.
@@ -335,6 +384,10 @@ Classifique por consequência real, não por categoria teórica.
 **Um segredo exposto é sempre Crítico até ser provado revogado.** Não rebaixe porque "é de
 teste" — verifique.
 
+**Só o confirmado é classificado.** Pendente de validação não recebe nível (Fase 2): o que entra
+na tabela acima é consequência demonstrada, e pendente, por definição, ainda não demonstrou. O
+que ele recebe é o lugar no veredito.
+
 ---
 
 ## Fase 4 — Relatório
@@ -345,14 +398,28 @@ Cabeçalho com âncora, veredito e **mapa de cobertura**, antes de qualquer deta
 
 ```
 Auditoria do commit a1b2c3d · 2026-08-13 · gitleaks 8.x
-2 críticas · 3 altas · 5 médias · 1 baixa
-VEREDITO: não publicar até resolver as críticas.
+2 críticas · 3 altas · 5 médias · 1 baixa · 2 pendentes de validação
+VEREDITO: não publicar até resolver as críticas e validar o cache do CDN (pendente 1).
 
 COBERTO: histórico git (180 commits) · árvore com ignorados · deps npm ·
          auth/autorização · RLS · iOS nativo
 NÃO COBERTO: osv-scanner ausente (SwiftPM sem audit) · sem teste dinâmico ·
          binário compilado não inspecionado
 ```
+
+Depois dos achados por severidade, a seção **Pendente de validação**, uma entrada por hipótese,
+sem nível, com o fato que falta e a checagem que o resolve:
+
+```
+PENDENTE 1 — `vercel.json` sem `Cache-Control` nas rotas autenticadas
+  Caminho: /api/documentos devolve dado do inquilino sem cabeçalho de cache.
+  Fato que falta: o CDN da frente cacheia resposta autenticada por padrão?
+  Checagem: curl -I com cookie de sessão; conferir `x-vercel-cache` e `age`.
+  Se confirmado: Crítica (inquilino A recebe o documento de B pelo cache).
+```
+
+Pendente **não** vira issue de correção (Fase 4, issues) — vira item de verificação para o dono.
+"Se confirmado" declara o que está em jogo, sem fingir que foi demonstrado.
 
 **O mapa de cobertura é obrigatório.** É a diferença entre "não achei nada" e "não olhei".
 Um leitor precisa saber exatamente o que esta auditoria não viu.
@@ -430,8 +497,15 @@ seções separadas, de propósito: o aceito é um achado real que se decidiu tol
 foi achado.
 
 ```markdown
-- `arquivo:linha` — candidato — refutado em AAAA-MM-DD por: <a prova> — reabrir se: <o que mudaria a conclusão>
+- `arquivo:linha` — candidato — refutado em AAAA-MM-DD por: <a prova> — provado em: <commit> — reabrir se: <o que mudaria a conclusão>
 ```
+
+**A refutação vale enquanto a fonte não muda — e isso se confere por máquina, não de memória.**
+A entrada registra o commit contra o qual foi provada; na auditoria seguinte, um `git diff
+<commit>..HEAD --stat -- <arquivo>` por entrada diz se o arquivo mudou. **Arquivo mudou, refutação
+reabre**, mesmo que o "reabrir se" em prosa não tenha acontecido — a prosa é o que o auditor
+lembra; o diff é o que aconteceu. Mesma regra para o risco aceito: aceito em cima de um arquivo
+que mudou é aceito em cima de outra coisa.
 
 ### O ciclo que fecha o furo de verdade
 
@@ -480,7 +554,9 @@ a referência aplicável. Prevenir é mais barato que auditar.
 - `references/multi-tenancy.md` — isolamento entre organizações, RLS por inquilino, função
   `security definer` que escreve pelo argumento, coluna nova que herda o grant da tabela,
   referência que o `service_role` segue sem re-escopo, vazamento por armazenamento e por cache,
-  teste de isolamento em cinco operações a partir do catálogo.
+  cópias derivadas (índice, embeddings, exportação) com ACL própria, autorização que sobrevive à
+  revogação, exportação e restauração que expandem escopo, teste de isolamento em cinco
+  operações a partir do catálogo.
 - `references/pre-publicacao.md` — limpeza de contexto interno, histórico do git, licenças,
   o que auditar antes de abrir o código ou entregar a um cliente.
 - `references/cadeia-e-ci.md` — GitHub Actions (`pull_request_target`, injeção via
@@ -489,7 +565,8 @@ a referência aplicável. Prevenir é mais barato que auditar.
 - `assets/security-ci.yml` — workflow mínimo que amarra gitleaks + osv-scanner + semgrep em
   cada push e PR, fechando o ciclo.
 - `assets/baseline.example.md` — modelo de `.security-baseline.md` para registrar risco aceito
-  **e refutação**, para a próxima auditoria não re-litigar o mesmo não-achado.
+  **e refutação** com o commit da prova, para a próxima auditoria não re-litigar o mesmo
+  não-achado e reabrir por diff quando a fonte mudar.
 - `assets/definer.test.ts` — teste de CI que lê as migrations: todo `update`/`do update` em função
   `security definer` leva `where`; a exceção fica escrita no teste, com motivo.
 - `assets/grants-de-coluna.test.ts` — teste de CI: em tabela declarada "grant por coluna", coluna
