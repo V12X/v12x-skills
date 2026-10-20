@@ -6,6 +6,45 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o
 versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Cada entrada nomeia a **skill**
 afetada e a sua versão; o repositório reúne mais de uma skill sob o [Método v12x](METHOD.md).
 
+## [v12x-scan 1.6.0] — 2026-10-20
+
+O ledger de cobertura por unidade de superfície: "nenhum furo silencioso" verificável por
+máquina. A ideia veio da `cloudflare/security-audit-skill`; a execução é a nossa — as unidades
+vêm **do código, por enumeração determinística**, não de reconhecimento por LLM, e sem o harness
+multi-agente. Motivação real: a crítica do eazyspace vivia numa policy da migration 0001 que
+quatro auditorias não releram, porque cada uma leu "as migrations recentes" e marcou RLS como
+coberta. O ledger teria mostrado `members · INSERT · lido em: nunca`.
+
+### Adicionado
+- `scripts/ledger.py` — `rascunho` enumera cada tabela, policy (tabela × operação), função SQL
+  (`security definer` marcada, sobrecarga é unidade própria), Edge Function, bucket, rota
+  (convenção de arquivo e `obj.verbo('/caminho')` em TS/JS, Python, Go, Rails), workflow e URL
+  scheme — com replay das migrations na ordem de arquivo **e de posição**: `drop` remove,
+  `replace` sobrescreve, `alter`/`grant`/`revoke` movem a origem para o último toque. `marcar`
+  registra estado com o commit. `validar --final` (e `--escopo`) é o portão: sai 1 se houver furo.
+  Só lê o repositório; Python 3.9+ sem dependências.
+- **Herança por diff**: com `.security-ledger.md` na raiz, o rascunho mantém `coberto` onde
+  `git diff <lido em>..HEAD -- <origem>` é vazio e reabre como `planejado` o que mudou. Mesma regra
+  de diff da linha de base (1.5.0), agora por unidade.
+- Seis estados: `planejado` · `coberto` · `amostrado` · `fora-de-escopo` · `adiado` · `pendente`.
+  Duas regras sem exceção: rodada com escopo marca o resto `fora-de-escopo`, nunca `coberto`; e
+  `planejado` no fim é furo.
+- `fase0.sh` chama o ledger ao final; SKILL ganha a tabela de estados na Fase 1, o portão e a
+  contagem por estado no cabeçalho do relatório na Fase 4, e a persistência no ciclo.
+- `assets/ledger.example.md`.
+- Fase 2: sem subagente disponível, Crítica/Alta com autorrefutação entra no mapa de cobertura.
+
+### Provado
+- Fixture com os padrões reais: `drop → create` no mesmo arquivo (achou dois bugs do enumerador
+  antes de publicar), sobrecarga criada antes de dropar a antiga, `drop function` sem assinatura,
+  `grant` tocando a tabela, Express com nome arbitrário de router. Herança reabriu exatamente as
+  unidades do arquivo tocado; validador barrou coberto-sem-commit, coberto-fora-do-escopo, adiado
+  sem motivo e planejado no fim.
+- eazyspace real, só leitura: 304 unidades em 0,3 s (114 `definer`, 100 policies, 13 Edge
+  Functions). A policy da crítica apareceu apontando para a 0084:24. E o ledger mostrou, na
+  primeira rodada, duas policies de UPDATE em `members` — a 0065 dropou o nome sem acento e a da
+  0001, com acento, sobreviveu.
+
 ## [v12x-scan 1.5.0] — 2026-10-20
 
 Disciplina de verificação, incorporada por comparação com a `cloudflare/security-audit-skill` —

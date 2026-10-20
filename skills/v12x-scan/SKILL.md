@@ -3,7 +3,7 @@ name: v12x-scan
 description: Auditoria de segurança em profundidade, com ferramentas determinísticas antes da análise por leitura, verificação adversarial de cada achado e relatório acionável. Use quando o usuário pedir "auditar segurança", "revisar segurança", "varredura de segurança", "tem vazamento?", "posso publicar isso?", "está seguro para open source?", "antes de publicar", "checar segredos", "auditar antes de entregar ao cliente", "hacker acessa pelo frontend", "checar IDOR/SSRF/XSS", "auditar meu agente/MCP", ou antes de tornar um repositório público, publicar app na loja, entregar código a terceiro, ou ligar multi-tenancy. Autossuficiente: cobre os fundamentos (segredos, RLS, auth, rate limit, pagamento, LLM, deploy, injeção) e vai além com aplicação web (IDOR, mass assignment, SSRF, XSS, CORS/CSRF, upload), backends fora de TS/JS (Python, Go, Ruby, PHP, Java), apps agênticos/LLM (injeção de prompt, MCP, agência excessiva), iOS/Swift nativo, isolamento entre inquilinos, cadeia de suprimento/CI e limpeza de contexto interno.
 license: MIT
 metadata:
-  version: "1.5.0"
+  version: "1.6.0"
 ---
 
 Auditoria de segurança para código que vai a produção, à loja, ao cliente ou ao público.
@@ -242,6 +242,23 @@ regra em teste de CI que lê as migrations e falha quando um `do update` em `def
 `where` — a exceção fica escrita no próprio teste, com motivo. Detalhe da regra em
 `references/multi-tenancy.md`.
 
+### O ledger de cobertura: as unidades vêm do código, não da memória
+
+O `fase0.sh` termina emitindo `.security-reports/ledger.md` (via `scripts/ledger.py`): **uma linha
+por unidade de superfície**, enumerada por ferramenta — cada tabela, cada policy (tabela ×
+operação), cada função SQL (com `security definer` marcada), cada Edge Function, cada bucket, cada
+rota, cada workflow, cada URL scheme. Com o replay das migrations na ordem certa: `drop` remove,
+`replace` sobrescreve, sobrecarga é unidade própria, e `alter`/`grant`/`revoke` movem a origem da
+tabela para o último toque.
+
+É o "nenhum furo silencioso" **verificável por máquina**. A auditoria não decide o que cobrir de
+cabeça: a lista já existe, e cada unidade termina com um estado (Fase 1). Num projeto real, foram
+304 unidades em 0,3 s — 114 funções `definer`, 100 policies — e a policy que escondia a crítica
+apareceu na primeira rodada, com arquivo e linha.
+
+Se já existe `.security-ledger.md` na raiz (a auditoria anterior persistiu), o rascunho **herda**
+os estados cuja fonte não mudou e **reabre por diff** os que mudaram — ver Fase 4.
+
 ### CI e arquivos de infraestrutura
 
 Se existir `.github/workflows/`, Dockerfile ou docker-compose, carregue
@@ -290,6 +307,21 @@ gerado com IA:
   (mass assignment).
 - Ações de administrador conferem papel **no servidor**, e não só escondem o botão?
 - O identificador do usuário vem da **sessão**, e nunca do corpo da requisição?
+
+**Cada unidade do ledger termina com um estado.** Ao percorrer uma categoria, marque no ledger o
+que foi feito, com `scripts/ledger.py marcar` (por id ou por regex, em lote):
+
+| Estado | Significa | Exige |
+|---|---|---|
+| `coberto` | lido inteiro, com o critério da categoria aplicado | `lido em` = commit (o `marcar` grava sozinho) |
+| `amostrado` | lido em parte — e isso é declarado, não escondido | `lido em`, e a nota diz o quanto |
+| `fora-de-escopo` | esta rodada decidiu não olhar | — (mas é visível) |
+| `adiado` | não deu, e o motivo está na nota | nota |
+| `pendente` | depende de fato fora do repositório (Fase 2) | nota com a checagem |
+
+Duas regras sem exceção: **rodada com escopo marca o resto `fora-de-escopo`, nunca `coberto`** — é
+o que impede "li as migrations recentes" de virar "RLS coberta" —; e **`planejado` no fim da
+auditoria é furo silencioso**: `ledger.py validar --final` sai com 1, e o relatório não sai antes.
 
 **Autorização não se amostra — varre-se.** Um scanner pode amostrar; autorização não. Basta
 **um** handler sem checagem de posse para o dado vazar, então percorra **todos** os handlers de
@@ -355,6 +387,8 @@ refutação é feita por um **verificador independente**: um subagente que receb
 conclusão, com uma ordem: *"Você não escreveu este candidato. Tente refutá-lo pelo código."* Ele
 devolve um dos três estados com a prova. Se ele refutar, o candidato morre ou vira pendente — não
 se "negocia". Para Média e Baixa a autorrefutação basta; o custo do subagente não se justifica.
+Se o ambiente não permite abrir subagente, a Crítica/Alta fica com autorrefutação **e isso entra
+no mapa de cobertura** ("Crítica/Alta sem verificador independente") — nunca em silêncio.
 
 ### Anti-padrões que esta fase existe para barrar
 
@@ -423,6 +457,22 @@ Pendente **não** vira issue de correção (Fase 4, issues) — vira item de ver
 
 **O mapa de cobertura é obrigatório.** É a diferença entre "não achei nada" e "não olhei".
 Um leitor precisa saber exatamente o que esta auditoria não viu.
+
+**E o ledger fecha o mapa por unidade.** Antes de escrever o relatório, `ledger.py validar
+.security-reports/ledger.md --final` (com `--escopo /regex/` se a rodada teve escopo). Se sair 1, a
+auditoria não acabou. No cabeçalho, a contagem por estado substitui o "coberto" em prosa:
+
+```
+LEDGER: 304 unidades · coberto 251 · amostrado 12 (rotas: 12 de 40, as de escrita) ·
+        fora-de-escopo 38 (iOS: rodada só de plataforma) · adiado 3 (motivo no ledger)
+```
+
+Ao encerrar, **persista o ledger** como `.security-ledger.md` na raiz, junto do relatório e da
+linha de base. É o que a próxima auditoria herda: `ledger.py rascunho` lê o anterior, mantém
+`coberto` onde `git diff <lido em>..HEAD -- <origem>` está vazio, e reabre como `planejado` ("fonte
+mudou desde X") o que mudou — a mesma regra de diff da linha de base, agora por unidade. "Coberto"
+passa a ter data e prova; e a policy da 0001 que ninguém releu em quatro auditorias aparece como
+`lido em: nunca`.
 
 ### Verificado e sólido (a prova de que a auditoria trabalhou)
 
@@ -512,8 +562,9 @@ que mudou é aceito em cima de outra coisa.
 Uma auditoria pontual não deixa nada "à prova de furos" — o que aproxima disso é o ciclo:
 
 1. **Persistir o relatório** em `.security-reports/AAAA-MM-DD.md` no repositório (e o JSON
-   do gitleaks ao lado — `scripts/fase0.sh` já salva em `.security-reports/fase0/`). A próxima
-   auditoria **diffa contra a anterior**: o que voltou é regressão e sobe um nível de severidade.
+   do gitleaks ao lado — `scripts/fase0.sh` já salva em `.security-reports/fase0/`), e **o ledger**
+   como `.security-ledger.md`. A próxima auditoria **diffa contra a anterior**: o que voltou é
+   regressão e sobe um nível de severidade; e o ledger herda o coberto que não mudou.
 2. **Cada achado corrigido vira verificação permanente.** Se o achado foi "token em log",
    nasce um grep no CI que falha se o padrão voltar; se foi "tabela sem RLS", nasce o teste
    de isolamento; se foi função `security definer` escrevendo sem `where`, ou coluna nova que
@@ -539,7 +590,10 @@ a referência aplicável. Prevenir é mais barato que auditar.
 ## Referências, scripts e templates
 
 - `scripts/fase0.sh` — roda a Fase 0 inteira (segredos, chaves, deps, semgrep, detecção de
-  linguagem), degrada com elegância e emite o mapa de cobertura pronto.
+  linguagem, ledger), degrada com elegância e emite o mapa de cobertura pronto.
+- `scripts/ledger.py` — ledger de cobertura por unidade de superfície: `rascunho` enumera
+  (replay das migrations, Edge Functions, rotas, buckets, CI, deep links) e herda do anterior por
+  diff; `marcar` registra estado com commit; `validar --final` é o portão. Só lê o repositório.
 - `references/fundamentos.md` — as oito classes base: segredos, RLS/regras de banco, auth,
   rate limit, pagamento, LLM, deploy, injeção. Sempre aplicável.
 - `references/web-app.md` — IDOR/autorização por objeto, mass assignment, SSRF, XSS,
@@ -564,6 +618,8 @@ a referência aplicável. Prevenir é mais barato que auditar.
   instalação, EXIF em imagens.
 - `assets/security-ci.yml` — workflow mínimo que amarra gitleaks + osv-scanner + semgrep em
   cada push e PR, fechando o ciclo.
+- `assets/ledger.example.md` — como fica um `.security-ledger.md` persistido, com os seis estados
+  em uso e o que cada um exige.
 - `assets/baseline.example.md` — modelo de `.security-baseline.md` para registrar risco aceito
   **e refutação** com o commit da prova, para a próxima auditoria não re-litigar o mesmo
   não-achado e reabrir por diff quando a fonte mudar.

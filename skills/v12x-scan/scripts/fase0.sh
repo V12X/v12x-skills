@@ -194,6 +194,21 @@ if [ ! -d "$ALVO/.github/workflows" ]; then
   gap "sem CI (nenhuma verificação roda sozinha — achado Média)"
 fi
 
+# ---- ledger de cobertura por unidade de superfície -----------------------------
+titulo "Ledger de cobertura (unidades de superfície)"
+LEDGER_PY="$(dirname "$0")/ledger.py"
+if have python3 && [ -f "$LEDGER_PY" ]; then
+  python3 "$LEDGER_PY" rascunho "$ALVO" --saida "$OUT/ledger.md" 2>&1
+  echo "-> cada unidade termina a auditoria com um estado; 'planejado' no fim é furo silencioso."
+  echo "   marcar:  python3 $LEDGER_PY marcar $OUT/ledger.md <id|/regex/> <estado> [--nota ...]"
+  echo "   validar: python3 $LEDGER_PY validar $OUT/ledger.md --final   (portão: sai 1 se houver furo)"
+  [ -f "$ALVO/.security-ledger.md" ] && echo "   (herdou estados de $ALVO/.security-ledger.md — ver 'reabertas por diff' acima)"
+  cob "ledger de cobertura por unidade (tabelas, policies, funções, edge, rotas, buckets, CI, deep links)"
+else
+  echo "python3 ausente ou ledger.py não encontrado — ledger não gerado"
+  gap "ledger de cobertura não gerado (sem python3): cobertura por unidade fica na prosa"
+fi
+
 # ---- mapa de cobertura -------------------------------------------------------
 titulo "MAPA DE COBERTURA (Fase 0)"
 printf 'COBERTO:%b\n' "$COB"
