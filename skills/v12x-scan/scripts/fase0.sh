@@ -202,6 +202,8 @@ if have python3 && [ -f "$LEDGER_PY" ]; then
   echo "-> cada unidade termina a auditoria com um estado; 'planejado' no fim é furo silencioso."
   echo "   marcar:  python3 $LEDGER_PY marcar $OUT/ledger.md <id|/regex/> <estado> [--nota ...]"
   echo "   validar: python3 $LEDGER_PY validar $OUT/ledger.md --final   (portão: sai 1 se houver furo)"
+  echo "   catálogo vivo: python3 $LEDGER_PY catalogo --sql  -> rode no banco de produção, salve o JSON,"
+  echo "                  python3 $LEDGER_PY catalogo $ALVO --vivo catalogo.json   (arquivos × produção)"
   [ -f "$ALVO/.security-ledger.md" ] && echo "   (herdou estados de $ALVO/.security-ledger.md — ver 'reabertas por diff' acima)"
   cob "ledger de cobertura por unidade (tabelas, policies, funções, edge, rotas, buckets, CI, deep links)"
 else

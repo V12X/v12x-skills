@@ -283,7 +283,7 @@ como a outra empresa.
 5. tudo numa transação que termina em rollback
 ```
 
-Três detalhes que decidem se o teste prova ou só parece provar:
+Quatro detalhes que decidem se o teste prova ou só parece provar:
 
 - **A lista vem do catálogo, não da mão.** Tabelas de `pg_tables` filtradas pela coluna de
   inquilino, funções de `pg_proc` no schema público — assim **a próxima tabela entra sozinha**.
@@ -295,7 +295,37 @@ Três detalhes que decidem se o teste prova ou só parece provar:
 - **Roda no CI contra um banco vazio** que sobe das migrations (a stack local do Supabase no
   runner). Se as migrations não sobem limpas num banco vazio, isso já é achado — é assim que
   aparecem o prefixo de migration duplicado e a migration que depende de uma conta que só existe
-  em produção.
+  em produção. E lembre que esse banco **é o dos arquivos, não o de produção**: se os dois
+  divergem (`ledger.py catalogo`), o teste verde prova o banco do CI.
+- **Cada espera de recusa é vista falhando uma vez.** Rode o teste contra um banco com o furo
+  aberto (a migration da correção fora, ou a policy antiga de volta) e veja-o cair; só então ele
+  vale como prova. Dois defeitos reais que passam verdes para sempre:
+
+  ```sql
+  -- ERRADO: o "aceitou" sai com P0001, e o handler do MESMO bloco aceita P0001 como recusa
+  begin
+    execute comando;
+    raise exception 'o banco aceitou';          -- capturado logo abaixo
+  exception when others then
+    if sqlstate in ('P0001', '22023') then return; end if;
+    raise;
+  end;
+
+  -- CERTO: o "aceitou" fica fora do bloco que captura
+  begin
+    begin
+      execute comando;
+    exception when others then
+      if sqlstate in ('P0001', '22023') then return; end if;
+      raise;
+    end;
+    raise exception 'o banco aceitou';
+  end;
+  ```
+
+  E o id do alvo se busca **como o dono**, antes de virar o atacante: buscado pela outra empresa,
+  a RLS o devolve nulo, a linha nasce sem a referência, e a "recusa" esperada nunca é testada.
+  Confira que o id não é nulo antes da espera.
 
 ---
 

@@ -6,8 +6,11 @@ validado antes do relatório com `ledger.py validar --final`. A próxima auditor
 **herda** o que não mudou: `coberto` em `0084abc` continua coberto se `git diff 0084abc..HEAD --
 <origem>` for vazio; senão volta a `planejado` com a nota "fonte mudou desde 0084abc".
 
-Gerado em 2026-09-05 · commit b60593a · 14 unidades.
-Estados: coberto 9 · amostrado 1 · fora-de-escopo 2 · adiado 1 · pendente 1
+Este rascunho rodou com `--vivo catalogo.json`: as policies que divergem do banco de produção
+levam a classificação na nota, e as que só existem no vivo entram com origem `catálogo vivo`.
+
+Gerado em 2026-09-05 · commit b60593a · 15 unidades.
+Estados: coberto 9 · amostrado 1 · fora-de-escopo 2 · adiado 1 · pendente 2
 
 Regras: toda unidade termina com um estado. `coberto`/`amostrado` exigem `lido em` (commit).
 Rodada com escopo marca o resto `fora-de-escopo`, nunca `coberto`. `adiado` leva motivo.
@@ -17,8 +20,9 @@ Rodada com escopo marca o resto `fora-de-escopo`, nunca `coberto`. `adiado` leva
 | tab-ccb31 | tabela | members | supabase/migrations/0084_ninguem_entra_sozinho.sql:27 | coberto | b60593a | grant por coluna conferido |
 | tab-9a1e0 | tabela | workspaces | supabase/migrations/0083_grant_por_coluna.sql:12 | coberto | b60593a | operator_note fora do grant |
 | pol-7cb00 | policy | members · INSERT · "admin convida" | supabase/migrations/0084_ninguem_entra_sozinho.sql:24 | coberto | b60593a | só admin; teste de isolamento cobre |
-| pol-094c5 | policy | members · SELECT · "membro lê o time" | supabase/migrations/0001_workspace.sql:148 | coberto | b60593a |  |
-| pol-99dcd | policy | members · UPDATE · "cada um edita o próprio cadastro" | supabase/migrations/0001_workspace.sql:152 | coberto | b60593a | duplicada com a da 0065 (acento) — ver achado M-3 |
+| pol-094c5 | policy | members · SELECT · "membro lê o time" | supabase/migrations/0001_workspace.sql:148 | coberto | b60593a | grafia diverge do vivo ("membro le o time"): mesma policy, nome diferente — o próximo replace falha calado num dos dois bancos |
+| pol-99dcd | policy | members · UPDATE · "cada um edita o próprio cadastro" | supabase/migrations/0001_workspace.sql:152 | coberto | b60593a | só nos arquivos: soma por OR com a quase homônima "cada um edita o proprio cadastro" no banco dos arquivos (CI/local); o vivo não a tem — achado M-3, escrito como furo do banco do CI |
+| pol-5be21 | policy | credentials · DELETE · "limpeza" | catálogo vivo | pendente |  | só no vivo: não está em migration nenhuma — criada no painel? perguntar ao dono e trazer para uma migration |
 | fun-f0068 | função | post_assistant_message(uuid, uuid, uuid, text, uuid, jsonb) | supabase/migrations/0083_a_funcao_confere.sql:47 | coberto | b60593a | security definer · where amarra p_user |
 | fun-2c7d1 | função | admin_set_plan(uuid, text) | supabase/migrations/0066_planos.sql:30 | coberto | b60593a | security definer · só service_role |
 | edg-11f3a | edge | teach | supabase/functions/teach/index.ts | coberto | b60593a | lê arquivo com o token da pessoa |

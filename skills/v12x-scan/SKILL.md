@@ -3,7 +3,7 @@ name: v12x-scan
 description: Auditoria de segurança em profundidade, com ferramentas determinísticas antes da análise por leitura, verificação adversarial de cada achado e relatório acionável. Use quando o usuário pedir "auditar segurança", "revisar segurança", "varredura de segurança", "tem vazamento?", "posso publicar isso?", "está seguro para open source?", "antes de publicar", "checar segredos", "auditar antes de entregar ao cliente", "hacker acessa pelo frontend", "checar IDOR/SSRF/XSS", "auditar meu agente/MCP", ou antes de tornar um repositório público, publicar app na loja, entregar código a terceiro, ou ligar multi-tenancy. Autossuficiente: cobre os fundamentos (segredos, RLS, auth, rate limit, pagamento, LLM, deploy, injeção) e vai além com aplicação web (IDOR, mass assignment, SSRF, XSS, CORS/CSRF, upload), backends fora de TS/JS (Python, Go, Ruby, PHP, Java), apps agênticos/LLM (injeção de prompt, MCP, agência excessiva), iOS/Swift nativo, isolamento entre inquilinos, cadeia de suprimento/CI e limpeza de contexto interno.
 license: MIT
 metadata:
-  version: "1.6.0"
+  version: "1.7.0"
 ---
 
 Auditoria de segurança para código que vai a produção, à loja, ao cliente ou ao público.
@@ -212,6 +212,29 @@ FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public' AND p.proacl IS NOT NULL ORDER BY 1;
 ```
 
+**São dois bancos, e o achado precisa dizer de qual é.** As migrations descrevem o banco que
+**nasce dos arquivos**: a stack local, o CI, qualquer reconstrução. Produção é outro banco, e
+diverge sem ninguém ver: migration aplicada por outro caminho (MCP, painel, texto editado antes de
+subir), policy criada à mão. Caso real: as três primeiras migrations subiram para produção com os
+nomes das policies **sem acento**, e os arquivos sempre os tiveram **com**. Quatro replaces que
+dropavam o nome sem acento valiam em produção e falhavam calados no banco dos arquivos, onde a
+policy antiga continuava somando por OR. Lido só dos arquivos, parecia furo de produção; era furo
+do CI. O `ledger.py catalogo` compara os dois:
+
+```bash
+python3 scripts/ledger.py catalogo --sql          # a consulta que exporta o catálogo vivo como JSON
+# rode-a no banco de produção e salve o resultado em catalogo.json; depois:
+python3 scripts/ledger.py catalogo . --vivo catalogo.json
+```
+
+Ele classifica cada divergência: policy que **sobrevive só no banco dos arquivos** (soma por OR
+com a quase homônima, e o vivo não a tem), **grafia diferente** (mesma policy; o próximo replace
+falha num dos dois), **só nos arquivos** (migration que não subiu, drop à mão) e **só no vivo**
+(criada fora do git: superfície que a leitura do repositório nunca vê). Sai com 1 se houver
+qualquer uma. O replay das migrations não segue SQL dinâmico (`execute format('drop policy …')`),
+e avisa quando encontra; para o banco dos arquivos exato, rode a mesma consulta num banco montado
+das migrations (`supabase db reset`) e passe com `--montado`.
+
 Função de leitura executável por `anon` que "devolve vazio" ainda é achado (Baixa, de coerência):
 a superfície de EXECUTE é a menor possível, não a que "por acaso não vaza". E rode os **advisors**
 do provedor (no Supabase, o Security Advisor): RLS desligada, função `definer` com `search_path`
@@ -258,6 +281,10 @@ apareceu na primeira rodada, com arquivo e linha.
 
 Se já existe `.security-ledger.md` na raiz (a auditoria anterior persistiu), o rascunho **herda**
 os estados cuja fonte não mudou e **reabre por diff** os que mudaram — ver Fase 4.
+
+Com o catálogo vivo exportado, `ledger.py rascunho . --vivo catalogo.json` anota cada policy que
+diverge e **acrescenta as que só existem no vivo**, com origem `catálogo vivo`. Essas nunca herdam
+`coberto` de uma rodada anterior: o catálogo não tem `git diff` que prove que não mudou.
 
 ### CI e arquivos de infraestrutura
 
@@ -356,6 +383,14 @@ candidato só é achado se nomear **os quatro**; se qualquer um faltar, descarte
 Depois, tente **refutar** o achado explicitamente. Existe validação em camada anterior?
 Middleware que já barra? RLS que já cobre? Se existir, o achado morre — e isso é bom.
 
+**Achado de banco lido só nos arquivos não é "Confirmado" ainda.** Policy, grant ou função que a
+auditoria viu nas migrations descreve o banco que nasce dos arquivos; se há acesso ao banco vivo,
+o achado passa pelo `ledger.py catalogo` antes de receber severidade. Se o vivo diverge, o achado
+é do banco dos arquivos (CI, stack local, reconstrução) e se escreve assim: "no banco que o CI
+monta, X; produção não tem". Continua sendo achado — o teste do CI prova a coisa errada, e a
+próxima reconstrução herda o furo —, mas a severidade é a desse banco, não a de produção. Sem
+acesso ao vivo, o achado de produção fica **pendente de validação**, com a consulta como checagem.
+
 ### Os três estados de um candidato
 
 Cada candidato que passou pela âncora termina em **exatamente um** destes:
@@ -397,6 +432,7 @@ no mapa de cobertura** ("Crítica/Alta sem verificador independente") — nunca 
 - Tratar impacto só sobre o próprio usuário como fronteira cruzada.
 - Reportar efeito mais forte que o observado.
 - Dar severidade a pendente de validação.
+- Chamar de furo de produção o que só foi lido nas migrations.
 - Escrever o relatório antes de a verificação terminar.
 
 **Regra de calibragem:** é melhor entregar cinco achados sólidos que trinta candidatos, dos
@@ -569,7 +605,13 @@ Uma auditoria pontual não deixa nada "à prova de furos" — o que aproxima dis
    nasce um grep no CI que falha se o padrão voltar; se foi "tabela sem RLS", nasce o teste
    de isolamento; se foi função `security definer` escrevendo sem `where`, ou coluna nova que
    herdou o grant da tabela, entram `assets/definer.test.ts` e `assets/grants-de-coluna.test.ts`,
-   que leem as migrations no CI. Achado que só vive no relatório volta. O template `assets/security-ci.yml`
+   que leem as migrations no CI. Achado que só vive no relatório volta. **E o teste novo precisa
+   ser visto falhando uma vez**, contra um banco onde o furo ainda está aberto, antes de valer como
+   prova: teste de recusa que nunca falhou pode não saber falhar. Dois casos reais, no mesmo
+   arquivo de isolamento: o helper que exigia a recusa levantava "o banco aceitou" com um código
+   que o próprio bloco capturava como recusa, e passou por seis semanas sem falhar uma vez; e um
+   caso buscava o id do alvo **como o atacante**, que a RLS impedia de ver, então o id vinha nulo
+   e a recusa era de outra coisa. Detalhe em `references/multi-tenancy.md`. O template `assets/security-ci.yml`
    amarra gitleaks, osv-scanner e semgrep em cada push e PR — é o mínimo que faz a Fase 0
    rodar sozinha.
 3. **Reauditar após as correções**, no mínimo a fase 0 inteira — correção de segurança
@@ -593,7 +635,9 @@ a referência aplicável. Prevenir é mais barato que auditar.
   linguagem, ledger), degrada com elegância e emite o mapa de cobertura pronto.
 - `scripts/ledger.py` — ledger de cobertura por unidade de superfície: `rascunho` enumera
   (replay das migrations, Edge Functions, rotas, buckets, CI, deep links) e herda do anterior por
-  diff; `marcar` registra estado com commit; `validar --final` é o portão. Só lê o repositório.
+  diff; `marcar` registra estado com commit; `validar --final` é o portão; `catalogo` compara as
+  policies dos arquivos com as do banco vivo (e `rascunho --vivo` anota o ledger). Só lê o
+  repositório e o JSON que você exportou.
 - `references/fundamentos.md` — as oito classes base: segredos, RLS/regras de banco, auth,
   rate limit, pagamento, LLM, deploy, injeção. Sempre aplicável.
 - `references/web-app.md` — IDOR/autorização por objeto, mass assignment, SSRF, XSS,

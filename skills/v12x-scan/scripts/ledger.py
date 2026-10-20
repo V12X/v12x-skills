@@ -28,12 +28,22 @@
 #       todo estado válido; coberto/amostrado com commit; com --escopo, nada fora
 #       do escopo pode estar coberto/amostrado; com --final, nenhum planejado.
 #       Sai com 1 se violar — serve de portão no CI.
+#   ledger.py catalogo --sql
+#       imprime a consulta que exporta o catálogo vivo (policies e tabelas) como JSON.
+#   ledger.py catalogo <alvo> --vivo catalogo.json
+#       compara as policies dos arquivos com as do banco vivo e classifica cada
+#       divergência; sai com 1 se houver alguma. `rascunho --vivo` anota o ledger.
 #
-# Só lê o repositório. Escreve apenas o arquivo de saída. Sem dependências.
+# Só lê o repositório (e o JSON que você exportou). Escreve apenas o arquivo de saída.
+# Sem dependências.
 # -----------------------------------------------------------------------------
 from __future__ import annotations
-import argparse, hashlib, os, re, subprocess, sys
+import argparse, hashlib, json, os, re, subprocess, sys, unicodedata
 from pathlib import Path
+
+# migrations que mexem em policy por SQL dinâmico (`execute format('drop policy ...')`): o
+# replay estático não as segue, e diz isso em vez de fingir que o banco dos arquivos é o que ele vê
+DINAMICO: list[str] = []
 
 ESTADOS = ('planejado', 'coberto', 'amostrado', 'fora-de-escopo', 'adiado', 'pendente')
 IGNORAR_DIRS = {'node_modules', '.git', '.build', 'build', 'dist', 'DerivedData', 'Pods',
@@ -70,6 +80,10 @@ def sem_comentarios_sql(sql: str) -> str:
 
 def linha_de(texto: str, pos: int) -> int:
     return texto.count('\n', 0, pos) + 1
+
+def chave_frouxa(s: str) -> str:
+    """sem acento, sem caixa: "Lê o próprio" e "le o proprio" viram a mesma chave."""
+    return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c)).lower().strip()
 
 # ------------------------------------------------------------ enumeração ----
 # Cada enumerador devolve lista de dicts: tipo, unidade, origem, nota.
@@ -109,7 +123,7 @@ def enum_sql(raiz: Path):
       ('touch_table',  re.compile(r'\b(?:alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?|(?:grant|revoke)\s+[^;]*?\bon\s+(?:table\s+)?)([\w."]+)', re.I)),
       ('create_policy', re.compile(r'\bcreate\s+policy\s+("[^"]+"|\w+)\s+on\s+([\w."]+)((?:(?!\bcreate\s+policy\b)[\s\S]){0,400}?)(?=;|\bcreate\s+policy\b)', re.I)),
       ('drop_policy',  re.compile(r'\bdrop\s+policy\s+(?:if\s+exists\s+)?("[^"]+"|\w+)\s+on\s+([\w."]+)', re.I)),
-      ('alter_policy', re.compile(r'\balter\s+policy\s+("[^"]+"|\w+)\s+on\s+([\w."]+)', re.I)),
+      ('alter_policy', re.compile(r'\balter\s+policy\s+("[^"]+"|\w+)\s+on\s+([\w."]+)(?:\s+rename\s+to\s+("[^"]+"|\w+))?', re.I)),
       ('create_fn',    re.compile(r'\bcreate\s+(?:or\s+replace\s+)?function\s+([\w."]+)\s*\(', re.I)),
       ('drop_fn',      re.compile(r'\bdrop\s+function\s+(?:if\s+exists\s+)?([\w."]+)\s*(\([^)]*\))?', re.I)),
       ('bucket',       re.compile(r"insert\s+into\s+storage\.buckets[^;]*?values\s*\(\s*'([^']+)'", re.I | re.S)),
@@ -117,6 +131,8 @@ def enum_sql(raiz: Path):
     for d in mig_dirs:
         for f in sorted(d.glob('*.sql')):
             sql = sem_comentarios_sql(f.read_text(errors='replace'))
+            if re.search(r'\bexecute\b[^;]*\bpolicy\b', sql, re.I) and rel(f, raiz) not in DINAMICO:
+                DINAMICO.append(rel(f, raiz))
             eventos = []
             for kind, rx in RX:
                 for m in rx.finditer(sql): eventos.append((m.start(), kind, m))
@@ -124,7 +140,10 @@ def enum_sql(raiz: Path):
             for pos, kind, m in eventos:
                 origem = f'{rel(f, raiz)}:{linha_de(sql, pos)}'
                 if kind == 'create_table': tabelas[nome(m.group(1))] = {'origem': origem}
-                elif kind == 'drop_table': tabelas.pop(nome(m.group(1)), None)
+                elif kind == 'drop_table':
+                    t = nome(m.group(1)); tabelas.pop(t, None)
+                    # as policies morrem com a tabela; sem isto, ficavam como unidades fantasmas
+                    for k in [k for k in policies if k[0] == t]: policies.pop(k)
                 elif kind == 'touch_table':
                     t = nome(m.group(1))
                     if t in tabelas: tabelas[t]['origem'] = origem
@@ -135,7 +154,9 @@ def enum_sql(raiz: Path):
                 elif kind == 'drop_policy': policies.pop((nome(m.group(2)), m.group(1).strip('"')), None)
                 elif kind == 'alter_policy':
                     k = (nome(m.group(2)), m.group(1).strip('"'))
-                    if k in policies: policies[k]['origem'] = origem
+                    if k in policies:
+                        policies[k]['origem'] = origem
+                        if m.group(3): policies[(k[0], m.group(3).strip('"'))] = policies.pop(k)
                 elif kind == 'create_fn':
                     fn = nome(m.group(1))
                     # parâmetros: do '(' até o ')' que fecha, respeitando aninhamento
@@ -161,10 +182,9 @@ def enum_sql(raiz: Path):
 
     # policies quase homônimas na mesma tabela × operação: um replace que mirou o nome errado
     # (acento, caixa) e `drop ... if exists` engoliu. Caso real: 0065 dropou "proprio", a da
-    # 0001 ("próprio") sobreviveu, e o endurecimento nunca entrou em vigor (policies somam por OR).
-    import unicodedata
-    def chave_frouxa(s: str) -> str:
-        return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c)).lower().strip()
+    # 0001 ("próprio") sobreviveu nos arquivos (policies somam por OR). MAS: em produção a 0001
+    # tinha subido sem acento, e lá o replace valeu. O par diz que os dois bancos divergem, não
+    # em qual deles está o furo — quem decide é o catálogo vivo (`ledger.py catalogo`).
     grupos: dict = {}
     for (t, pn), v in policies.items():
         grupos.setdefault((t, v['op'], chave_frouxa(pn)), []).append(pn)
@@ -173,13 +193,15 @@ def enum_sql(raiz: Path):
         if len(nomes) > 1:
             for pn in nomes:
                 outros = ', '.join(f'"{o}"' for o in nomes if o != pn)
-                quase[(t, pn)] = f'quase homônima de {outros} na mesma operação — replace que falhou?'
+                quase[(t, pn)] = (f'quase homônima de {outros} na mesma operação — replace que falhou? '
+                                  f'confira no catálogo vivo antes de classificar')
 
     out = []
     for t, v in sorted(tabelas.items()):
-        out.append({'tipo': 'tabela', 'unidade': t, 'origem': v['origem'], 'nota': ''})
+        out.append({'tipo': 'tabela', 'unidade': t, 'origem': v['origem'], 'nota': '', '_chave': t})
     for (t, p), v in sorted(policies.items()):
-        out.append({'tipo': 'policy', 'unidade': f'{t} · {v["op"]} · "{p}"', 'origem': v['origem'], 'nota': quase.get((t, p), '')})
+        out.append({'tipo': 'policy', 'unidade': f'{t} · {v["op"]} · "{p}"', 'origem': v['origem'],
+                    'nota': quase.get((t, p), ''), '_chave': (t, v['op'], p)})
     for (fn, n), v in sorted(funcoes.items()):
         out.append({'tipo': 'função', 'unidade': f'{fn}({", ".join(v["tipos"])})', 'origem': v['origem'],
                     'nota': 'security definer' if v['definer'] else ''})
@@ -257,6 +279,118 @@ def enumerar(raiz: Path):
         u['id'] = uid(u['tipo'], u['unidade']); u['estado'] = 'planejado'; u['lido_em'] = ''
     return unidades
 
+# ------------------------------------------------------- catálogo vivo ----
+# As migrations descrevem o banco que nasce dos ARQUIVOS (stack local, CI, reconstrução).
+# Produção é outro banco, e pode divergir: migration aplicada por outro caminho (MCP, painel,
+# texto editado antes de subir), policy criada à mão, replace que valeu num e não no outro.
+# Caso real: as 0001–0003 subiram para produção com os nomes das policies sem acento, os
+# arquivos tinham acento, e quatro replaces que dropavam o nome sem acento falhavam SÓ no banco
+# dos arquivos. O ledger lido só dos arquivos chamou de furo de produção o que era furo do CI.
+#
+# Exportar o catálogo (uma linha, um JSON) e salvar em arquivo:
+SQL_VIVO = """select json_build_object(
+  'policies', (select json_agg(json_build_object('tabela', tablename, 'op', cmd, 'nome', policyname))
+               from pg_policies where schemaname in ('public', 'storage')),
+  'tabelas',  (select json_agg(c.relname) from pg_class c join pg_namespace n on n.oid = c.relnamespace
+               where n.nspname = 'public' and c.relkind in ('r', 'p'))
+) as catalogo;"""
+
+def ler_vivo(p: Path) -> tuple[set, set]:
+    """devolve ({(tabela, op, nome)}, {tabela}). Aceita o objeto de SQL_VIVO, a linha que o
+    cliente devolve em volta dele ([{"catalogo": {...}}]), ou só a lista de policies — como
+    objetos {tabela|tablename, op|cmd, nome|policyname} ou listas [schema?, tabela, op, nome]."""
+    dado = json.loads(p.read_text())
+    while isinstance(dado, list) and len(dado) == 1 and isinstance(dado[0], dict) and len(dado[0]) == 1:
+        dado = next(iter(dado[0].values()))               # [{"catalogo": {...}}] -> {...}
+    if isinstance(dado, str): dado = json.loads(dado)
+    if isinstance(dado, list): dado = {'policies': dado}
+    pols, tabs = set(), {str(t).lower() for t in (dado.get('tabelas') or [])}
+    for x in dado.get('policies') or []:
+        if isinstance(x, dict):
+            t, op, n = (x.get('tabela') or x.get('tablename'), x.get('op') or x.get('cmd'),
+                        x.get('nome') or x.get('policyname'))
+        else:
+            t, op, n = x[-3], x[-2], x[-1]
+        pols.add((str(t).lower(), str(op).upper(), n))
+    return pols, tabs
+
+def comparar_vivo(unidades: list[dict], vivo: tuple[set, set]) -> dict:
+    """classifica cada divergência entre o banco dos arquivos e o vivo.
+    duplicada: só nos arquivos, e o vivo tem a quase homônima — que os arquivos TAMBÉM têm.
+               No banco dos arquivos ela soma por OR com a nova; no vivo, não existe.
+    grafia:    a mesma policy com nome diferente nos dois (acento, caixa). Inofensiva hoje;
+               o próximo replace mira um nome e falha calado no outro banco.
+    so_arquivos: nenhuma correspondente viva — migration que não subiu, ou drop feito à mão.
+    so_vivo:   nenhuma correspondente nos arquivos — criada fora do git. É superfície que a
+               leitura do repositório nunca vê."""
+    pol_vivo, tab_vivo = vivo
+    # o export traz public e storage; o que mora em outro schema nos arquivos fica fora da conta
+    pol_arq = {u['_chave'] for u in unidades if u['tipo'] == 'policy' and '_chave' in u and '.' not in u['_chave'][0]}
+    tab_arq = {u['_chave'] for u in unidades if u['tipo'] == 'tabela' and '_chave' in u and '.' not in u['_chave']}
+    frouxa = lambda k: (k[0], k[1], chave_frouxa(k[2]))
+    vivo_por_frouxa: dict = {}
+    for k in pol_vivo: vivo_por_frouxa.setdefault(frouxa(k), []).append(k)
+    arq_por_frouxa: dict = {}
+    for k in pol_arq: arq_por_frouxa.setdefault(frouxa(k), []).append(k)
+    r = {'duplicada': [], 'grafia': [], 'so_arquivos': [], 'so_vivo': [],
+         'tabela_so_arquivos': [], 'tabela_so_vivo': []}
+    for k in sorted(pol_arq - pol_vivo):
+        par = sorted(vivo_por_frouxa.get(frouxa(k), []))
+        if not par: r['so_arquivos'].append((k, None))
+        elif any(v in pol_arq for v in par): r['duplicada'].append((k, par[0]))
+        else: r['grafia'].append((k, par[0]))
+    for k in sorted(pol_vivo - pol_arq):
+        if not any(a not in pol_vivo for a in arq_por_frouxa.get(frouxa(k), [])):
+            r['so_vivo'].append((k, None))               # sem par de grafia: criada fora do git
+    if tab_vivo:                                          # o export pode não trazer tabelas
+        r['tabela_so_arquivos'] = sorted(tab_arq - tab_vivo)
+        r['tabela_so_vivo'] = sorted(tab_vivo - tab_arq)
+    return r
+
+ROTULO_VIVO = {
+    'duplicada': 'só nos arquivos: soma por OR com a quase homônima "{par}" no banco dos arquivos '
+                 '(CI/local); o vivo não a tem — furo do banco dos arquivos, não de produção',
+    'grafia': 'grafia diverge do vivo ("{par}"): mesma policy, nome diferente — o próximo replace '
+              'falha calado num dos dois bancos',
+    'so_arquivos': 'só nos arquivos: o banco vivo não tem — migration que não subiu, ou drop à mão',
+    'so_vivo': 'só no vivo: não está em migration nenhuma — criada fora do git, ler no catálogo',
+}
+
+def aplicar_vivo(unidades: list[dict], r: dict) -> list[dict]:
+    """anota as unidades dos arquivos e acrescenta as que só existem no vivo."""
+    por_chave = {u['_chave']: u for u in unidades if '_chave' in u}
+    junta = lambda u, txt: u.__setitem__('nota', (u['nota'] + ' · ' if u['nota'] else '') + txt)
+    for tipo in ('duplicada', 'grafia', 'so_arquivos'):
+        for k, par in r[tipo]:
+            junta(por_chave[k], ROTULO_VIVO[tipo].format(par=par[2] if par else ''))
+    novas = []
+    for (t, op, n), _ in r['so_vivo']:
+        novas.append({'tipo': 'policy', 'unidade': f'{t} · {op} · "{n}"', 'origem': 'catálogo vivo',
+                      'nota': ROTULO_VIVO['so_vivo'], '_chave': (t, op, n)})
+    for t in r['tabela_so_arquivos']:
+        junta(por_chave[t], 'só nos arquivos: o banco vivo não tem esta tabela')
+    for t in r['tabela_so_vivo']:
+        novas.append({'tipo': 'tabela', 'unidade': t, 'origem': 'catálogo vivo',
+                      'nota': 'só no vivo: nenhuma migration a cria — RLS e grants só no catálogo', '_chave': t})
+    for u in novas:
+        u['id'] = uid(u['tipo'], u['unidade']); u['estado'] = 'planejado'; u['lido_em'] = ''
+    return unidades + novas
+
+def resumo_vivo(r: dict) -> int:
+    """imprime a divergência e devolve quantas há."""
+    n = sum(len(v) for v in r.values())
+    titulos = [('duplicada', 'policy que sobrevive só no banco dos arquivos (furo do CI/local, não de produção)'),
+               ('grafia', 'mesma policy, grafia diferente (o próximo replace falha num dos dois)'),
+               ('so_arquivos', 'policy só nos arquivos'), ('so_vivo', 'policy só no vivo (fora do git)')]
+    for chave, titulo in titulos:
+        if r[chave]:
+            print(f'\n{titulo}: {len(r[chave])}')
+            for (t, op, nome), par in r[chave]:
+                print(f'  {t} · {op} · "{nome}"' + (f'   ↔ vivo "{par[2]}"' if par else ''))
+    for chave, titulo in (('tabela_so_arquivos', 'tabela só nos arquivos'), ('tabela_so_vivo', 'tabela só no vivo')):
+        if r[chave]: print(f'\n{titulo}: {len(r[chave])}\n  ' + ', '.join(r[chave]))
+    return n
+
 # ---------------------------------------------------------- ledger (md) ----
 
 CABECALHO = '| id | tipo | unidade | origem | estado | lido em | nota |'
@@ -305,6 +439,11 @@ def escrever_ledger(p: Path, unidades: list[dict], raiz: Path, removidas: list[d
 def cmd_rascunho(a):
     raiz = Path(a.alvo).resolve()
     atuais = enumerar(raiz)
+    divergencias = None
+    if a.vivo:
+        r = comparar_vivo(atuais, ler_vivo(Path(a.vivo)))
+        atuais = aplicar_vivo(atuais, r)
+        divergencias = sum(len(v) for v in r.values())
     anterior = Path(a.anterior) if a.anterior else raiz / '.security-ledger.md'
     removidas = []
     if anterior.exists():
@@ -314,6 +453,10 @@ def cmd_rascunho(a):
         for u in atuais:
             v = por_chave.pop((u['tipo'], u['unidade']), None)
             if not v: u['nota'] = (u['nota'] + ' · ' if u['nota'] else '') + 'novo'; continue
+            if u['origem'] == 'catálogo vivo' and v['estado'] in ('coberto', 'amostrado'):
+                # o catálogo não tem git diff: nada prova que não mudou desde a leitura
+                u['nota'] = f'só no vivo, sem diff que prove que não mudou (era {v["estado"]} em {v["lido_em"]})'
+                reabertas += 1; continue
             if v['estado'] in ('coberto', 'amostrado') and v['lido_em']:
                 arq = u['origem'].split(':')[0]
                 diff = subprocess.run(['git', '-C', str(raiz), 'diff', '--quiet', v['lido_em'], 'HEAD', '--', arq],
@@ -340,6 +483,48 @@ def cmd_rascunho(a):
     if definers: print(f'  (funções security definer: {definers} — cada uma é para abrir)')
     plan = sum(1 for u in atuais if u['estado'] == 'planejado')
     print(f'  planejado: {plan} — a auditoria termina quando for zero (ou fora-de-escopo/adiado com motivo)')
+    tem_policy = any(u['tipo'] == 'policy' for u in atuais)
+    if DINAMICO:
+        print(f'  SQL dinâmico mexe em policy em {len(DINAMICO)} migration(s) que o replay não segue: '
+              + ', '.join(DINAMICO[:3]) + (' …' if len(DINAMICO) > 3 else ''))
+        print('  para o banco dos arquivos exato: exporte o catálogo de um banco montado das migrations '
+              'e use catalogo --montado')
+    if divergencias is None and tem_policy:
+        print('  policies vieram só dos arquivos: é o banco do CI/local, não necessariamente o de produção.')
+        print('  com acesso ao banco, exporte o catálogo (ledger.py catalogo --sql) e rode com --vivo.')
+    elif divergencias:
+        print(f'  catálogo vivo: {divergencias} divergência(s) entre arquivos e vivo — anotadas nas unidades '
+              f'(detalhe: ledger.py catalogo)')
+    elif divergencias == 0:
+        print('  catálogo vivo: policies dos arquivos e do vivo batem uma a uma.')
+
+def cmd_catalogo(a):
+    if a.sql:
+        print(SQL_VIVO); return
+    if not a.vivo: sys.exit('catalogo precisa de --vivo <arquivo.json> (gere com: ledger.py catalogo --sql)')
+    raiz = Path(a.alvo).resolve()
+    unidades = enumerar(raiz)
+    pol_vivo, tab_vivo = ler_vivo(Path(a.vivo))
+    if a.montado:
+        # o catálogo de um banco montado das migrations (supabase db reset / start) é a
+        # referência exata do "banco dos arquivos": vê o SQL dinâmico que o replay não vê
+        pol_m, tab_m = ler_vivo(Path(a.montado))
+        unidades = ([{'tipo': 'policy', 'unidade': '', '_chave': k} for k in pol_m] +
+                    [{'tipo': 'tabela', 'unidade': '', '_chave': t} for t in tab_m])
+        print('banco dos arquivos: catálogo montado (' + a.montado + '), não o replay')
+    print(f'arquivos: {sum(1 for u in unidades if u["tipo"] == "policy" and "." not in u["_chave"][0])} policies · '
+          f'vivo: {len(pol_vivo)} policies' + (f', {len(tab_vivo)} tabelas' if tab_vivo else ''))
+    if DINAMICO and not a.montado:
+        print(f'  SQL dinâmico mexe em policy em {len(DINAMICO)} migration(s) que o replay não segue: '
+              + ', '.join(DINAMICO[:3]) + (' …' if len(DINAMICO) > 3 else ''))
+        print('  para o banco dos arquivos exato: exporte o catálogo de um banco montado das migrations '
+              'e use catalogo --montado')
+    n = resumo_vivo(comparar_vivo(unidades, (pol_vivo, tab_vivo)))
+    if n:
+        print(f'\n{n} divergência(s). Achado de RLS lido dos arquivos só vira "Confirmado" depois de conferido aqui:')
+        print('o que só existe no banco dos arquivos é furo do CI/local, e se descreve assim.')
+        sys.exit(1)
+    print('\nos dois bancos têm as mesmas policies.')
 
 def cmd_marcar(a):
     p = Path(a.ledger)
@@ -398,7 +583,13 @@ def main():
     ap = argparse.ArgumentParser(description='ledger de cobertura por unidade de superfície (v12x-scan)')
     sp = ap.add_subparsers(dest='cmd', required=True)
     r = sp.add_parser('rascunho'); r.add_argument('alvo', nargs='?', default='.')
-    r.add_argument('--anterior'); r.add_argument('--saida'); r.set_defaults(fn=cmd_rascunho)
+    r.add_argument('--anterior'); r.add_argument('--saida')
+    r.add_argument('--vivo', help='JSON do catálogo vivo (ledger.py catalogo --sql gera a consulta)')
+    r.set_defaults(fn=cmd_rascunho)
+    c = sp.add_parser('catalogo'); c.add_argument('alvo', nargs='?', default='.')
+    c.add_argument('--vivo'); c.add_argument('--sql', action='store_true', help='imprime a consulta de export')
+    c.add_argument('--montado', help='JSON do mesmo export, tirado de um banco montado das migrations')
+    c.set_defaults(fn=cmd_catalogo)
     m = sp.add_parser('marcar'); m.add_argument('ledger'); m.add_argument('alvo', help='id ou /regex/')
     m.add_argument('estado'); m.add_argument('--nota', default=''); m.add_argument('--commit'); m.set_defaults(fn=cmd_marcar)
     v = sp.add_parser('validar'); v.add_argument('ledger'); v.add_argument('--escopo', help='/regex/')

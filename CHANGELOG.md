@@ -6,6 +6,49 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o
 versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Cada entrada nomeia a **skill**
 afetada e a sua versão; o repositório reúne mais de uma skill sob o [Método v12x](METHOD.md).
 
+## [v12x-scan 1.7.0] — 2026-10-20
+
+O banco dos arquivos não é o de produção, e o achado precisa dizer de qual é. Motivação real: a
+primeira rodada da 1.6.0 no eazyspace achou duas policies quase homônimas e as relatou como furo
+de produção. O catálogo vivo mostrou o contrário: as três primeiras migrations tinham subido para
+produção com os nomes **sem acento**, os arquivos sempre os tiveram **com**, e quatro replaces que
+dropavam o nome sem acento valiam em produção e falhavam calados só no banco que o CI monta. Ao
+provar a correção, o próprio teste de isolamento revelou que suas esperas de recusa nunca tinham
+falhado.
+
+### Adicionado
+- `ledger.py catalogo` — compara as policies dos arquivos com as do banco vivo e classifica cada
+  divergência: **sobrevive só no banco dos arquivos** (soma por OR com a quase homônima; o vivo
+  não a tem), **grafia diferente** (mesma policy; o próximo replace falha num dos dois), **só nos
+  arquivos** e **só no vivo** (criada fora do git), mais tabelas só de um lado. Sai com 1 se
+  houver divergência. `catalogo --sql` imprime a consulta de export; `--montado` usa o catálogo
+  de um banco montado das migrations no lugar do replay, para o caso exato.
+- `ledger.py rascunho --vivo` — anota as unidades que divergem e acrescenta as que só existem no
+  vivo (origem `catálogo vivo`). Essas nunca herdam `coberto`: o catálogo não tem `git diff`.
+- O replay **avisa** quando uma migration mexe em policy por SQL dinâmico
+  (`execute format('… policy …')`), que ele não segue, em vez de fingir que vê o banco inteiro.
+- Fase 0: "São dois bancos, e o achado precisa dizer de qual é", com o fluxo do export.
+- Fase 2: achado de banco lido só nos arquivos não é "Confirmado" antes do catálogo vivo; se
+  diverge, é furo do banco do CI e se escreve assim; sem acesso, fica pendente de validação. E um
+  anti-padrão novo: chamar de furo de produção o que só foi lido nas migrations.
+- Ciclo e `references/multi-tenancy.md`: **todo teste de recusa é visto falhando uma vez** contra
+  um banco com o furo aberto. Com os dois defeitos reais: o helper cujo "o banco aceitou" saía com
+  um código que o próprio bloco capturava como recusa, e o id do alvo buscado como o atacante,
+  que a RLS devolvia nulo.
+
+### Corrigido
+- `drop table` não removia as policies da tabela: ficavam no ledger como unidades fantasmas
+  (onze no eazyspace, das tabelas do cofre E2E apagadas na 0042).
+- `alter policy … rename to` passa a ser seguido no replay.
+
+### Provado
+- Fixture com uma policy de cada classe, schema fora do export (não vira falso positivo),
+  `rename` estático, `drop table` com policy, herança de unidade só do vivo (reaberta) e catálogo
+  idêntico (sai 0), nos dois formatos de JSON aceitos.
+- eazyspace real contra o catálogo de produção: **antes** da migration de correção, exatamente os
+  quatro replaces quebrados e as oito grafias; **depois**, pelo replay, as oito grafias e o aviso
+  de SQL dinâmico apontando a migration que as renomeia; com `--montado`, zero (85 = 85).
+
 ## [v12x-scan 1.6.0] — 2026-10-20
 
 O ledger de cobertura por unidade de superfície: "nenhum furo silencioso" verificável por
